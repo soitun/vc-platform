@@ -13,6 +13,22 @@ namespace VirtoCommerce.Platform.Core.Common
         private static List<TypeInfo<BaseType>> _typeInfos = new List<TypeInfo<BaseType>>();
 
         /// <summary>
+        /// The name of type field or property which return actual type (subclass name) of type instance
+        /// </summary>
+        public static string Discriminator { get; set; }
+
+        /// <summary>
+        /// All registered types withing current factory instance
+        /// </summary>
+        public static IEnumerable<Type> AllTypes
+        {
+            get
+            {
+                return _typeInfos.Select(x => x.Type);
+            }
+        }
+
+        /// <summary>
         /// All registered type mapping informations within current factory instance
         /// </summary>
         public static IEnumerable<TypeInfo<BaseType>> AllTypeInfos
@@ -120,7 +136,6 @@ namespace VirtoCommerce.Platform.Core.Common
         public Type Type { get; private set; }
         public Type MappedType { get; set; }
         public ICollection<object> Services { get; set; }
-        public string Discriminator { get; set; }
 
         public T GetService<T>()
         {

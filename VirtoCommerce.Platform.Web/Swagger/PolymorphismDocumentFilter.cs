@@ -33,30 +33,31 @@ namespace VirtoCommerce.Platform.Web.Swagger
                 if (schema != null)
                 {
                     // Find if type is registered in AbstractTypeFactory with descendants and TypeInfo have Discriminator filled
-                    var polymorphicBaseTypeInfoType = typeof(PolymorphicBaseTypeInfo<>).MakeGenericType(type);
-                    var polymorphicBaseTypeInfoInstance = Activator.CreateInstance(polymorphicBaseTypeInfoType);
-                    var derivedTypesPropertyGetter = polymorphicBaseTypeInfoType.GetProperty("DerivedTypes", BindingFlags.Instance | BindingFlags.Public).GetGetMethod();
-                    var derivedTypes = (derivedTypesPropertyGetter.Invoke(polymorphicBaseTypeInfoInstance, null) as IEnumerable<Type>).ToArray();
-                    var discriminatorPropertyGetter = polymorphicBaseTypeInfoType.GetProperty("Discriminator", BindingFlags.Instance | BindingFlags.Public).GetGetMethod();
-                    var discriminator = discriminatorPropertyGetter.Invoke(polymorphicBaseTypeInfoInstance, null) as string;
+                    var abstractTypeFactory = typeof(AbstractTypeFactory<>).MakeGenericType(type);
+                    var subtypesPropertyGetter = abstractTypeFactory.GetProperty("AllTypes", BindingFlags.Static | BindingFlags.Public).GetGetMethod();
+                    var subtypes = (subtypesPropertyGetter.Invoke(abstractTypeFactory, null) as IEnumerable<Type>).ToArray();
+                    var discriminatorPropertyGetter = abstractTypeFactory.GetProperty("Discriminator", BindingFlags.Static | BindingFlags.Public).GetGetMethod();
+                    var discriminator = discriminatorPropertyGetter.Invoke(abstractTypeFactory, null) as string;
 
                     // Polymorphism registration required if we have at least one TypeInfo in AbstractTypeFactory and Discriminator is set
-                    if (derivedTypes.Length > 0 && !string.IsNullOrEmpty(discriminator))
+                    if (subtypes.Length > 0 && !string.IsNullOrEmpty(discriminator))
                     {
-                        foreach (var derivedType in derivedTypes)
+                        foreach (var subtype in subtypes)
                         {
-                            var derivedTypeSchema = GetTypeSchema(schemaRegistry, derivedType, false);
+                            var subtypeSchema = GetTypeSchema(schemaRegistry, subtype, false);
 
                             // Make sure all derivedTypes are in schemaRegistry
-                            if (derivedTypeSchema == null)
+                            if (subtypeSchema == null)
                             {
-                                derivedTypeSchema = schemaRegistry.GetOrRegister(derivedType);
+                                schemaRegistry.GetOrRegister(subtype);
+                                // Swashbuckle doesn't return some required information in Schema instance at GetOrRegister call
+                                subtypeSchema = GetTypeSchema(schemaRegistry, subtype, false);
                             }
 
-                            AddInheritanceToDerivedTypeSchema(derivedTypeSchema, type);
+                            AddInheritanceToSubtypeSchema(schema, type, subtypeSchema);
                         }
 
-                        AddDiscriminatorToBaseType(schemaRegistry, type, discriminator);
+                        AddDiscriminatorToBaseType(schema, discriminator);
                     }
                 }
             }
@@ -65,7 +66,7 @@ namespace VirtoCommerce.Platform.Web.Swagger
         private Schema GetTypeSchema(SchemaRegistry schemaRegistry, Type type, bool throwOnEmpty)
         {
             Schema result = null;
-            var typeName = _useFullTypeNames ? type.FullName : type.Name;
+            var typeName = _useFullTypeNames ? type.FullName : type.FriendlyId();
 
             // IApiExplorer contains types from all api controllers, so some of them could be not presented in specific module schemaRegistry.
             if (schemaRegistry.Definitions.ContainsKey(typeName))
@@ -75,18 +76,16 @@ namespace VirtoCommerce.Platform.Web.Swagger
 
             if (throwOnEmpty && result == null)
             {
-                throw new KeyNotFoundException($"Derived type \"{type.FullName}\" does not exist in SchemaRegistry.");
+                throw new KeyNotFoundException($"Subtype \"{type.FullName}\" does not exist in SchemaRegistry.");
             }
 
             return result;
         }
 
-        private void AddDiscriminatorToBaseType(SchemaRegistry schemaRegistry, Type baseType, string discriminator)
+        private void AddDiscriminatorToBaseType(Schema baseTypeSchema, string discriminator)
         {
             // Need to make first discriminator character lower to avoid properties duplication because of case, as all properties in OpenApi spec are in camelCase
             discriminator = char.ToLowerInvariant(discriminator[0]) + discriminator.Substring(1);
-
-            var baseTypeSchema = GetTypeSchema(schemaRegistry, baseType, true);
 
             // Set up a discriminator property (it must be required)
             baseTypeSchema.discriminator = discriminator;
@@ -98,30 +97,23 @@ namespace VirtoCommerce.Platform.Web.Swagger
             }
         }
 
-        private void AddInheritanceToDerivedTypeSchema(Schema derivedTypeSchema, Type baseType)
+        private void AddInheritanceToSubtypeSchema(Schema baseTypeSchema, Type baseType, Schema subtypeSchema)
         {
             var clonedSchema = new Schema
             {
-                properties = derivedTypeSchema.properties,
-                type = derivedTypeSchema.type,
-                required = derivedTypeSchema.required
+                properties = subtypeSchema.properties.Where(x => !baseTypeSchema.properties.ContainsKey(x.Key)).ToDictionary(x => x.Key, x => x.Value),
+                type = subtypeSchema.type,
+                required = subtypeSchema.required
             };
 
             var baseTypeName = _useFullTypeNames ? baseType.FullName : baseType.FriendlyId();
 
             var parentSchema = new Schema { @ref = "#/definitions/" + baseTypeName };
 
-            derivedTypeSchema.allOf = new List<Schema> { parentSchema, clonedSchema };
+            subtypeSchema.allOf = new List<Schema> { parentSchema, clonedSchema };
 
             //reset properties for they are included in allOf, should be null but code does not handle it
-            derivedTypeSchema.properties = new Dictionary<string, Schema>();
-        }
-
-        // This private class is used to simplify querying from AbstractTypeFactory<T>.AllTypeInfos properties (no need to implement Linq queries using reflection)
-        private class PolymorphicBaseTypeInfo<T>
-        {
-            public string Discriminator { get => AbstractTypeFactory<T>.AllTypeInfos.FirstOrDefault()?.Discriminator; }
-            public IEnumerable<Type> DerivedTypes { get => AbstractTypeFactory<T>.AllTypeInfos.Select(x => x.Type) ?? Enumerable.Empty<Type>(); }
+            subtypeSchema.properties = new Dictionary<string, Schema>();
         }
     }
 }
