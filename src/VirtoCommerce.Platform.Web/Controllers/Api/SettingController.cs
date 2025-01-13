@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -30,10 +29,9 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpGet]
         [Route("")]
         [Authorize(PlatformConstants.Security.Permissions.SettingQuery)]
-        public async Task<ActionResult<ObjectSettingEntry>> GetAllGlobalSettings()
+        public Task<ActionResult<ObjectSettingEntry[]>> GetAllGlobalSettings()
         {
-            var result = await _settingsManager.GetObjectSettingsAsync(_settingsManager.AllRegisteredSettings.Where(x => !x.IsHidden).Select(x => x.Name));
-            return Ok(result);
+            return GetGlobalModuleSettingsAsync(id: null);
         }
 
         /// <summary>
@@ -46,13 +44,12 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [Authorize(PlatformConstants.Security.Permissions.SettingQuery)]
         public async Task<ActionResult<ObjectSettingEntry[]>> GetGlobalModuleSettingsAsync(string id)
         {
-            var criteria = new SettingsSearchCriteria
-            {
-                ModuleId = id,
-                Take = int.MaxValue
-            };
-            var result = await _settingsSearchService.SearchSettingsAsync(criteria);
-            return Ok(result.Results.Where(x=>!x.IsHidden).ToList());
+            var criteria = AbstractTypeFactory<SettingsSearchCriteria>.TryCreateInstance();
+            criteria.ModuleId = id;
+            criteria.IsHidden = false;
+
+            var result = await _settingsSearchService.SearchAllNoCloneAsync(criteria);
+            return Ok(result);
         }
 
         /// <summary>
@@ -62,7 +59,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         /// <returns></returns>
         [HttpGet]
         [Route("{name}")]
-        [Authorize(PlatformConstants.Security.Permissions.SettingAccess)]
+        [Authorize(PlatformConstants.Security.Permissions.SettingQuery)]
         public async Task<ActionResult<ObjectSettingEntry>> GetGlobalSettingAsync(string name)
         {
             var result = await _settingsManager.GetObjectSettingAsync(name);
@@ -79,7 +76,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [ProducesResponseType(typeof(void), StatusCodes.Status204NoContent)]
         public async Task<ActionResult> UpdateAsync([FromBody] ObjectSettingEntry[] objectSettings)
         {
-            using (await AsyncLock.GetLockByKey("settings").GetReleaserAsync())
+            using (await AsyncLock.GetLockByKey("settings").LockAsync())
             {
                 await _settingsManager.SaveObjectSettingsAsync(objectSettings);
             }

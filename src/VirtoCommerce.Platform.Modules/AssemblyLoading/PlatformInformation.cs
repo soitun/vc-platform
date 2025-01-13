@@ -35,14 +35,14 @@ namespace VirtoCommerce.Platform.Modules.AssemblyLoading
             {
                 NativeLibraryPrefixes = new[] { "", "lib", };
                 NativeLibraryExtensions = new[] { ".dylib" };
-                NuGetPackagesCache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), ".nuget", "packages");
+                NuGetPackagesCache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
                 DirectorySeparator = Path.AltDirectorySeparatorChar;
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 NativeLibraryPrefixes = new[] { "", "lib" };
                 NativeLibraryExtensions = new[] { ".so", ".so.1" };
-                NuGetPackagesCache = Path.Combine("~", ".nuget", "packages");
+                NuGetPackagesCache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
                 DirectorySeparator = Path.AltDirectorySeparatorChar;
             }
             else

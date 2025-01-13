@@ -6,8 +6,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Primitives;
-using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.Modularity;
 using VirtoCommerce.Platform.Core.Modularity.Exceptions;
 using VirtoCommerce.Platform.Core.Settings;
@@ -19,11 +17,6 @@ namespace VirtoCommerce.Platform.Web.Extensions
 {
     public static class ApplicationBuilderExtensions
     {
-        private static readonly Dictionary<string, StringValues> CustomHeaders = new()
-        {
-            { "X-Frame-Options", new StringValues("SAMEORIGIN") }
-        };
-        
         public static IApplicationBuilder UsePlatformSettings(this IApplicationBuilder appBuilder)
         {
             var settingsRegistrar = appBuilder.ApplicationServices.GetRequiredService<ISettingsRegistrar>();
@@ -32,7 +25,7 @@ namespace VirtoCommerce.Platform.Web.Extensions
 
             var settingsManager = appBuilder.ApplicationServices.GetRequiredService<ISettingsManager>();
 
-            var sendDiagnosticData = settingsManager.GetValue(Setup.SendDiagnosticData.Name, (bool)Setup.SendDiagnosticData.DefaultValue);
+            var sendDiagnosticData = settingsManager.GetValue<bool>(Setup.SendDiagnosticData);
             if (!sendDiagnosticData)
             {
                 var licenseProvider = appBuilder.ApplicationServices.GetRequiredService<LicenseProvider>();
@@ -61,17 +54,6 @@ namespace VirtoCommerce.Platform.Web.Extensions
             return appBuilder;
         }
 
-        public static IApplicationBuilder UseSecurityHeaders(this IApplicationBuilder appBuilder)
-        {
-            appBuilder.Use(async (context, next) =>
-            {
-                context.Response.Headers.AddRange(CustomHeaders);
-                await next();
-            });
-
-            return appBuilder;
-        }
-
         private static IEnumerable<ManifestModuleInfo> GetInstalledModules(IServiceProvider serviceProvider)
         {
             var moduleCatalog = serviceProvider.GetRequiredService<ILocalModuleCatalog>();
@@ -93,7 +75,7 @@ namespace VirtoCommerce.Platform.Web.Extensions
         /// <returns></returns>
         public static IApplicationBuilder ExecuteSynchronized(this IApplicationBuilder app, Action payload)
         {
-            var distributedLockProvider = app.ApplicationServices.GetRequiredService<IDistributedLockProvider>();
+            var distributedLockProvider = app.ApplicationServices.GetRequiredService<IInternalDistributedLockService>();
             distributedLockProvider.ExecuteSynchronized(nameof(Startup), (x) => payload());
             return app;
         }

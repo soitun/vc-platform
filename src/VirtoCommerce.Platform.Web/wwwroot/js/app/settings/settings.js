@@ -1,6 +1,6 @@
 angular.module("platformWebApp")
     .config(
-        ['$stateProvider', function ($stateProvider) {
+        ['$stateProvider', '$provide', function ($stateProvider, $provide) {
             $stateProvider
                 .state('workspace.modulesSettings', {
                     url: '/settings',
@@ -18,6 +18,24 @@ angular.module("platformWebApp")
                     }
                     ]
                 });
+
+            $provide.decorator('platformWebApp.bladeNavigationService', [
+                '$delegate', 'platformWebApp.localizableSettingService',
+                function ($delegate, localizableSettingService) {
+                    var showBlade = $delegate.showBlade;
+
+                    $delegate.showBlade = function (blade, parentBlade) {
+                        if (blade.template === "$(Platform)/Scripts/app/settings/blades/setting-dictionary.tpl.html" &&
+                            localizableSettingService.isLocalizable(blade.currentEntityId))
+                        {
+                            blade.template = "$(Platform)/Scripts/app/settings/blades/localizable-setting-value-list.html";
+                            blade.controller = "platformWebApp.localizableSettingValueListController";
+                            blade.settingName = blade.currentEntityId;
+                        }
+                        showBlade(blade, parentBlade);
+                    };
+                    return $delegate;
+                }]);
         }]
     )
     .run(['platformWebApp.mainMenuService', 'platformWebApp.breadcrumbHistoryService', 'platformWebApp.changeLogApi', 'platformWebApp.toolbarService', 'platformWebApp.dialogService', '$state', function (mainMenuService, breadcrumbHistoryService, changeLogApi, toolbarService, dialogService, $state) {
@@ -37,24 +55,32 @@ angular.module("platformWebApp")
 
         // Add 'Reset cache' command to settings blade
         var resetCacheCommand = {
-            name: 'platform.commands.reset-storefront-cache',
+            name: 'platform.commands.cache-reset.name',
+            title: 'platform.commands.cache-reset.title',
             icon: 'fa fa-eraser',
             executeMethod: function (blade) {
-                blade.isLoading = true;
-
-                changeLogApi.forceChanges({}, function () {
-                    blade.isLoading = false;
-
-                    var dialog = {
-                        id: "cacheResetDialog",
-                        title: 'platform.dialogs.storefront-cache-reset-successfully.title',
-                        message: 'platform.dialogs.storefront-cache-reset-successfully.message'
-                    };
-                    dialogService.showSuccessDialog(dialog);
-                });
-
+                var confirmDialog = {
+                    id: "confirmCacheResetDialog",
+                    title: "platform.dialogs.cache-reset.title",
+                    message: "platform.dialogs.cache-reset.confirm-reset-message",
+                    callback: function (confirm) {
+                        if (confirm) {
+                            blade.isLoading = true;
+                            changeLogApi.resetPlatformCache({}, function () {
+                                blade.isLoading = false;
+                                var successDialog = {
+                                    id: "successCacheResetDialog",
+                                    title: "platform.dialogs.cache-reset.title",
+                                    message: "platform.dialogs.cache-reset.reset-successfully-message",
+                                };
+                                dialogService.showSuccessDialog(successDialog);
+                            });
+                        }
+                    }
+                }
+                dialogService.showWarningDialog(confirmDialog);
             },
-            canExecuteMethod: function () { return true; },
+            canExecuteMethod: function (blade) { return !blade.isLoading; },
             permission: 'cache:reset',
             index: 2
         };

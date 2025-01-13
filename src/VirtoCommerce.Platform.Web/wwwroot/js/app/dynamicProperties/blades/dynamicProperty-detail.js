@@ -24,6 +24,30 @@ angular.module('platformWebApp')
             });
         };
 
+        $scope.$watch('blade.currentEntity.valueType', function (newValue) {
+            blade.hasMultivalue = blade.hasDictionary = blade.hasMultilanguage = true;
+
+            switch (newValue) {
+                case 'DateTime':
+                case 'Boolean':
+                case 'Image':
+                    blade.hasMultivalue = blade.currentEntity.isArray = false;
+                    blade.hasDictionary = blade.currentEntity.isDictionary = false;
+                    blade.hasMultilanguage = blade.currentEntity.isMultilingual = false;
+                    break;
+                case 'Integer':
+                case 'Decimal':
+                    blade.hasDictionary = blade.currentEntity.isDictionary = false;
+                    blade.hasMultilanguage = blade.currentEntity.isMultilingual = false;
+                    break;
+                case 'LongText':
+                case 'Html':
+                    blade.hasDictionary = blade.currentEntity.isDictionary = false;
+                    blade.hasMultivalue = blade.currentEntity.isArray = false;
+                    break;
+            }
+        });
+
         $scope.arrayFlagValidator = function (value) {
             return !value || blade.currentEntity.valueType === 'ShortText' || blade.currentEntity.valueType === 'Integer' || blade.currentEntity.valueType === 'Decimal';
         };
@@ -66,13 +90,17 @@ angular.module('platformWebApp')
 
         $scope.saveChanges = function () {
             if (blade.isNew) {
-                dynamicPropertiesApi.save({ id: blade.objectType }, blade.currentEntity,
+                blade.currentEntity.objectType = blade.objectType;
+                dynamicPropertiesApi.save({}, blade.currentEntity,
                     function (data) {
                         blade.onChangesConfirmedFn(data);
                         // save dictionary items for new entity
                         if (data.isDictionary) {
-                            dictionaryItemsApi.save({ id: blade.objectType, propertyId: data.id },
-                                localDictionaryValues,
+                            localDictionaryValues.forEach(function (x) {
+                                x.propertyId = data.id;
+                            });
+
+                            dictionaryItemsApi.save({}, localDictionaryValues,
                                 function () {
                                     $scope.bladeClose();
                                     blade.parentBlade.refresh(true);
@@ -85,7 +113,7 @@ angular.module('platformWebApp')
                     },
                     function (error) { bladeNavigationService.setError('Error ' + error.status, blade); });
             } else {
-                dynamicPropertiesApi.update({ id: blade.objectType, propertyId: blade.currentEntity.id }, blade.currentEntity,
+                dynamicPropertiesApi.update({}, blade.currentEntity,
                     function () {
                         angular.copy(blade.currentEntity, blade.origEntity);
                         blade.currentEntity = blade.origEntity;
@@ -105,7 +133,7 @@ angular.module('platformWebApp')
                 message: "platform.dialogs.dynamic-property-delete.message",
                 callback: function (remove) {
                     if (remove) {
-                        dynamicPropertiesApi.delete({ id: blade.objectType, propertyId: blade.currentEntity.id },
+                        dynamicPropertiesApi.delete({ propertyIds: [blade.currentEntity.id] },
                             function () {
                                 $scope.bladeClose();
                                 blade.parentBlade.refresh(true);

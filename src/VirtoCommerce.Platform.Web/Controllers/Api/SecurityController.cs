@@ -16,10 +16,10 @@ using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.Events;
 using VirtoCommerce.Platform.Core.Exceptions;
 using VirtoCommerce.Platform.Core.Extensions;
-using VirtoCommerce.Platform.Core.Notifications;
 using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.Platform.Core.Security.Events;
 using VirtoCommerce.Platform.Core.Security.Search;
+using VirtoCommerce.Platform.Security.Extensions;
 using VirtoCommerce.Platform.Security.ExternalSignIn;
 using VirtoCommerce.Platform.Web.Model.Security;
 using VirtoCommerce.Platform.Web.Security;
@@ -38,11 +38,10 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         private readonly UserOptionsExtended _userOptionsExtended;
         private readonly PasswordOptionsExtended _passwordOptions;
         private readonly PasswordLoginOptions _passwordLoginOptions;
+        private readonly IdentityOptions _identityOptions;
         private readonly IPermissionsRegistrar _permissionsProvider;
         private readonly IUserSearchService _userSearchService;
         private readonly IRoleSearchService _roleSearchService;
-        private readonly IPasswordValidator<ApplicationUser> _passwordValidator;
-        private readonly IEmailSender _emailSender;
         private readonly IEventPublisher _eventPublisher;
         private readonly IUserApiKeyService _userApiKeyService;
         private readonly ILogger<SecurityController> _logger;
@@ -58,8 +57,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             IOptions<UserOptionsExtended> userOptionsExtended,
             IOptions<PasswordOptionsExtended> passwordOptions,
             IOptions<PasswordLoginOptions> passwordLoginOptions,
-            IPasswordValidator<ApplicationUser> passwordValidator,
-            IEmailSender emailSender,
+            IOptions<IdentityOptions> identityOptions,
             IEventPublisher eventPublisher,
             IUserApiKeyService userApiKeyService,
             ILogger<SecurityController> logger,
@@ -69,13 +67,12 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             _securityOptions = securityOptions.Value;
             _userOptionsExtended = userOptionsExtended.Value;
             _passwordOptions = passwordOptions.Value;
-            _passwordValidator = passwordValidator;
             _passwordLoginOptions = passwordLoginOptions.Value ?? new PasswordLoginOptions();
+            _identityOptions = identityOptions.Value;
             _permissionsProvider = permissionsProvider;
             _roleManager = roleManager;
             _userSearchService = userSearchService;
             _roleSearchService = roleSearchService;
-            _emailSender = emailSender;
             _eventPublisher = eventPublisher;
             _userApiKeyService = userApiKeyService;
             _logger = logger;
@@ -83,7 +80,6 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         }
 
         private UserManager<ApplicationUser> UserManager => _signInManager.UserManager;
-        private string CurrentUserName => User?.Identity?.Name;
 
         private readonly string UserNotFound = "User not found.";
         private readonly string UserForbiddenToEdit = "It is forbidden to edit this user.";
@@ -100,18 +96,43 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [AllowAnonymous]
         public async Task<ActionResult<SignInResult>> Login([FromBody] LoginRequest request)
         {
-            var loginResult = await _signInManager.PasswordSignInAsync(request.UserName, request.Password, request.RememberMe, true);
-            if (loginResult.Succeeded)
-            {
-                var user = await UserManager.FindByNameAsync(request.UserName);
-                await _eventPublisher.Publish(new UserLoginEvent(user));
+            // Measure the duration of a succeeded response and delay subsequent failed responses to prevent timing attacks
+            var delayedResponse = DelayedResponse.Create(nameof(SecurityController), nameof(Login));
 
-                //Do not allow login to admin customers and rejected users
-                if (await UserManager.IsInRoleAsync(user, PlatformConstants.Security.SystemRoles.Customer))
-                {
-                    return Ok(SignInResult.NotAllowed);
-                }
+            var user = await UserManager.FindByNameAsync(request.UserName);
+
+            // Allows signin to back office by either username (login) or email if IdentityOptions.User.RequireUniqueEmail is True. 
+            if (user == null && _identityOptions.User.RequireUniqueEmail)
+            {
+                user = await UserManager.FindByEmailAsync(request.UserName);
             }
+
+            if (user == null)
+            {
+                await delayedResponse.FailAsync();
+                return Ok(SignInResult.Failed);
+            }
+
+            await _eventPublisher.Publish(new BeforeUserLoginEvent(user));
+
+            var loginResult = await _signInManager.PasswordSignInAsync(user, request.Password, request.RememberMe, lockoutOnFailure: true);
+
+            if (!loginResult.Succeeded)
+            {
+                await delayedResponse.FailAsync();
+                return Ok(loginResult);
+            }
+
+            await SetLastLoginDate(user);
+            await _eventPublisher.Publish(new UserLoginEvent(user));
+
+            //Do not allow login to admin customers and rejected users
+            if (await UserManager.IsInRoleAsync(user, PlatformConstants.Security.SystemRoles.Customer))
+            {
+                loginResult = SignInResult.NotAllowed;
+            }
+
+            await delayedResponse.SucceedAsync();
 
             return Ok(loginResult);
         }
@@ -121,11 +142,12 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         /// </summary>
         [HttpGet]
         [Authorize]
+        [AllowAnonymous]
         [Route("logout")]
         [ProducesResponseType(typeof(void), StatusCodes.Status204NoContent)]
         public async Task<ActionResult> Logout()
         {
-            var user = await UserManager.FindByNameAsync(CurrentUserName);
+            var user = await GetCurrentUserAsync();
             if (user != null)
             {
                 await _signInManager.SignOutAsync();
@@ -140,13 +162,14 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         /// </summary>
         [HttpGet]
         [Authorize]
+        [AllowAnonymous]
         [Route("currentuser")]
         public async Task<ActionResult<UserDetail>> GetCurrentUser()
         {
-            var user = await UserManager.FindByNameAsync(CurrentUserName);
+            var user = await GetCurrentUserAsync();
             if (user == null)
             {
-                return NotFound();
+                return Ok(new { });
             }
 
             var result = new UserDetail
@@ -156,8 +179,17 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
                 UserName = user.UserName,
                 PasswordExpired = user.PasswordExpired,
                 DaysTillPasswordExpiry = PasswordExpiryHelper.ContDaysTillPasswordExpiry(user, _userOptionsExtended),
-                Permissions = user.Roles.SelectMany(x => x.Permissions).Select(x => x.Name).Distinct().ToArray()
+                Permissions = user.Roles.SelectMany(x => x.Permissions).Select(x => x.Name).Distinct().ToArray(),
+                AuthenticationMethod = HttpContext.User.GetAuthenticationMethod(),
+                IsSsoAuthenticationMethod = HttpContext.User.IsExternalSignIn(),
             };
+
+            // Password never expired with SSO
+            if (result.IsSsoAuthenticationMethod)
+            {
+                result.PasswordExpired = false;
+                result.DaysTillPasswordExpiry = -1;
+            }
 
             return Ok(result);
         }
@@ -308,20 +340,6 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         }
 
         /// <summary>
-        /// Old SearchAsync users by keyword
-        /// </summary>
-        /// <param name="criteria">Search criteria.</param>
-        /// <remarks>Obsolete, only for backward compatibility with V2</remarks>
-        [HttpPost]
-        [Route("users")]
-        [Authorize(PlatformPermissions.SecurityQuery)]
-        [Obsolete("PT-789 Left only for backward compatibility with V2")]
-        public Task<ActionResult<UserSearchResult>> SearchUsersOld([FromBody] UserSearchCriteria criteria)
-        {
-            return SearchUsers(criteria);
-        }
-
-        /// <summary>
         /// Get user details by user name
         /// </summary>
         /// <param name="userName"></param>
@@ -409,9 +427,14 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [Authorize]
-        public Task<ActionResult<SecurityResult>> ChangeCurrentUserPassword([FromBody] ChangePasswordRequest changePassword)
+        public async Task<ActionResult<SecurityResult>> ChangeCurrentUserPassword([FromBody] ChangePasswordRequest changePassword)
         {
-            return ChangePassword(User.Identity.Name, changePassword);
+            if (HttpContext.User.IsExternalSignIn())
+            {
+                return BadRequest(new SecurityResult { Errors = new[] { $"Could not change password for {HttpContext.User.GetAuthenticationMethod()} authentication method" } });
+            }
+
+            return await ChangePassword(User.Identity.Name, changePassword);
         }
 
         /// <summary>
@@ -426,7 +449,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [Authorize(PlatformPermissions.SecurityUpdate)]
         public async Task<ActionResult<SecurityResult>> ChangePassword([FromRoute] string userName, [FromBody] ChangePasswordRequest changePassword)
         {
-            var currentUser = await UserManager.FindByNameAsync(CurrentUserName);
+            var currentUser = await GetCurrentUserAsync();
             if (currentUser == null)
             {
                 throw new PlatformException("Can't find current user.");
@@ -481,7 +504,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [Authorize(PlatformPermissions.SecurityUpdate)]
         public async Task<ActionResult<SecurityResult>> ResetPassword([FromRoute] string userName, [FromBody] ResetPasswordConfirmRequest resetPasswordConfirm)
         {
-            var currentUser = await UserManager.FindByNameAsync(CurrentUserName);
+            var currentUser = await GetCurrentUserAsync();
             if (currentUser == null)
             {
                 throw new PlatformException("Can't find current user.");
@@ -586,8 +609,12 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [AllowAnonymous]
         public async Task<ActionResult> RequestPasswordReset(string loginOrEmail)
         {
+            // Measure the duration of a succeeded response and delay subsequent failed responses to prevent timing attacks
+            var delayedResponse = DelayedResponse.Create(nameof(SecurityController), nameof(RequestPasswordReset));
+
             var user = await UserManager.FindByNameAsync(loginOrEmail);
-            if (user == null)
+
+            if (user == null && _identityOptions.User.RequireUniqueEmail)
             {
                 user = await UserManager.FindByEmailAsync(loginOrEmail);
             }
@@ -595,16 +622,15 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             // Return 200 to prevent potential user name/email harvesting
             if (user == null)
             {
+                await delayedResponse.FailAsync();
                 return Ok();
             }
 
             var nextRequestDate = user.LastPasswordChangeRequestDate + _passwordOptions.RepeatedResetPasswordTimeLimit;
             if (nextRequestDate != null && nextRequestDate > DateTime.UtcNow)
             {
-                return Ok(new
-                {
-                    NextRequestAt = nextRequestDate,
-                });
+                await delayedResponse.FailAsync();
+                return Ok(new { NextRequestAt = nextRequestDate });
             }
 
             //Do not permit rejected users and customers
@@ -617,13 +643,17 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
                 // ASP.NET Core has OOTB protection from Host Header Injection Attacks: AllowedHosts configuration option
                 // More information https://docs.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/host-filtering
                 // Also it can be additionally configured at load-balancer and firewall level. 
-                var callbackUrl = $"{Request.Scheme}://{Request.Host}/#/resetpassword/{user.Id}/{token}";
+                var callbackUrl = $"{Request.Scheme}://{Request.Host}/#!/resetpassword/{user.Id}/{token}";
 
-                await _emailSender.SendEmailAsync(user.Email, "Reset password", callbackUrl.ToString());
+                var requestPasswordResetEvent = new UserRequestPasswordResetEvent(user, callbackUrl);
+
+                await _eventPublisher.Publish(requestPasswordResetEvent);
 
                 user.LastPasswordChangeRequestDate = DateTime.UtcNow;
                 await UserManager.UpdateAsync(user);
             }
+
+            await delayedResponse.SucceedAsync();
 
             return Ok();
         }
@@ -633,12 +663,8 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [AllowAnonymous]
         public async Task<ActionResult<IdentityResult>> ValidatePassword([FromBody] string password)
         {
-            ApplicationUser user = null;
-            if (User.Identity.IsAuthenticated)
-            {
-                user = await UserManager.FindByNameAsync(User.Identity.Name);
-            }
-            var result = await _passwordValidator.ValidateAsync(UserManager, user, password);
+            var user = await GetCurrentUserAsync();
+            var result = await ValidatePassword(user, password);
 
             return Ok(result);
         }
@@ -659,13 +685,12 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             }
 
             ApplicationUser user = null;
-
             if (validatePassword.UserName != null)
             {
                 user = await UserManager.FindByNameAsync(validatePassword.UserName);
             }
 
-            var result = await _passwordValidator.ValidateAsync(UserManager, user, validatePassword.NewPassword);
+            var result = await ValidatePassword(user, validatePassword.NewPassword);
 
             return Ok(result);
         }
@@ -693,13 +718,20 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             if (applicationUser.EmailConfirmed != user.EmailConfirmed
                 && !Request.HttpContext.User.HasGlobalPermission(PlatformPermissions.SecurityVerifyEmail))
             {
-                return Unauthorized();
+                return Forbid();
             }
 
             if (!applicationUser.Email.EqualsInvariant(user.Email))
             {
                 // SetEmailAsync also: sets EmailConfirmed to false and updates the SecurityStamp
                 await UserManager.SetEmailAsync(user, user.Email);
+            }
+
+            // Restore PasswordHash and SecurityStamp, use another API for password management
+            if (!_securityOptions.ReturnPasswordHash)
+            {
+                user.PasswordHash = applicationUser.PasswordHash;
+                user.SecurityStamp = applicationUser.SecurityStamp;
             }
 
             if (user.LastPasswordChangedDate != applicationUser.LastPasswordChangedDate)
@@ -782,7 +814,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         {
             var result = new PasswordChangeEnabledResult(true);
 
-            var currentUser = await UserManager.FindByNameAsync(CurrentUserName);
+            var currentUser = await GetCurrentUserAsync();
             if (currentUser?.IsAdministrator == true)
             {
                 result.Enabled = _passwordOptions.PasswordChangeByAdminEnabled;
@@ -804,7 +836,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             var user = await UserManager.FindByIdAsync(id);
             if (user != null)
             {
-                var result = await UserManager.SetLockoutEndDateAsync(user, DateTime.MaxValue);
+                var result = await UserManager.SetLockoutEndDateAsync(user, DateTime.MaxValue.ToUniversalTime());
                 return Ok(result.ToSecurityResult());
             }
 
@@ -825,7 +857,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             if (user != null)
             {
                 await UserManager.ResetAccessFailedCountAsync(user);
-                var result = await UserManager.SetLockoutEndDateAsync(user, DateTimeOffset.MinValue);
+                var result = await UserManager.SetLockoutEndDateAsync(user, DateTimeOffset.MinValue.ToUniversalTime());
                 return Ok(result.ToSecurityResult());
             }
 
@@ -873,7 +905,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         [HttpGet]
         [Route("logintypes")]
         [AllowAnonymous]
-        public ActionResult GetLoginTypes()
+        public ActionResult<List<LoginType>> GetLoginTypes()
         {
             var options = new List<LoginType>
             {
@@ -1019,18 +1051,16 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             return Ok(success);
         }
 
-        #region PT-788 Obsolete methods
-
-        [Obsolete("use /roles/search instead")]
-        [HttpPost]
-        [Route("roles")]
-        [Authorize(PlatformPermissions.SecurityQuery)]
-        public Task<ActionResult<RoleSearchResult>> SearchRolesObsolete([FromBody] RoleSearchCriteria request)
+        private Task<ApplicationUser> GetCurrentUserAsync()
         {
-            return SearchRoles(request);
-        }
+            if (string.IsNullOrEmpty(User.Identity?.Name) ||
+                !User.Identity.IsAuthenticated)
+            {
+                return Task.FromResult<ApplicationUser>(null);
+            }
 
-        #endregion PT-788 Obsolete methods
+            return UserManager.FindByNameAsync(User.Identity.Name);
+        }
 
         private bool IsUserEditable(string userName)
         {
@@ -1066,6 +1096,30 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
         private IList<ApplicationUser> ReduceUsersDetails(IList<ApplicationUser> users)
         {
             return users?.Select(x => ReduceUserDetails(x)).ToList();
+        }
+
+        private async Task<IdentityResult> ValidatePassword(ApplicationUser user, string password)
+        {
+            var errors = new List<IdentityError>();
+            var isValid = true;
+            foreach (var passwordValidator in UserManager.PasswordValidators)
+            {
+                var identityResult = await passwordValidator.ValidateAsync(UserManager, user, password);
+                if (!identityResult.Succeeded)
+                {
+                    errors.AddRange(identityResult.Errors);
+                    isValid = false;
+                }
+            }
+
+            var result = isValid ? IdentityResult.Success : IdentityResult.Failed(errors.ToArray());
+            return result;
+        }
+
+        private Task SetLastLoginDate(ApplicationUser user)
+        {
+            user.LastLoginDate = DateTime.UtcNow;
+            return _signInManager.UserManager.UpdateAsync(user);
         }
     }
 }
