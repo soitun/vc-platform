@@ -1,5 +1,5 @@
 angular.module('platformWebApp')
-.factory('platformWebApp.authService', ['$http', '$rootScope', '$cookieStore', '$state', '$interpolate', '$q', 'platformWebApp.authDataStorage', function ($http, $rootScope, $cookieStore, $state, $interpolate, $q, authDataStorage) {
+    .factory('platformWebApp.authService', ['$http', '$rootScope', '$state', '$interpolate', '$q', '$window', 'platformWebApp.authDataStorage', 'platformWebApp.externalSignInStorage', function ($http, $rootScope, $state, $interpolate, $q, $window, authDataStorage, externalSignInStorage) {
     var serviceBase = 'api/platform/security/';
     var authContext = {
         userId: null,
@@ -14,10 +14,23 @@ angular.module('platformWebApp')
             function (results) {
                 changeAuth(results.data);
             });
-    };
+        };
 
-    authContext.login = function (email, password, remember) {       
-        var requestData = 'grant_type=password&scope=offline_access&username=' + encodeURIComponent(email) + '&password=' + encodeURIComponent(password);
+    authContext.login = function (email, password, remember) {
+            return $http.post(serviceBase + 'login/', { userName: email, password: password, rememberMe: remember }).then(
+                function (response) {
+                    return authContext.fillAuthData().then(function () {
+                        return response.data;
+                    });
+                },
+                function (error) {
+                    authContext.logout();
+                    return $q.reject(error);
+                });
+        };
+
+    authContext.loginToken = function (email, password, remember) {
+            var requestData = 'grant_type=password&scope=offline_access&username=' + encodeURIComponent(email) + '&password=' + encodeURIComponent(password);
         return $http.post('connect/token', requestData, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }).then(
             function (response) {
                 var authData = {
@@ -90,9 +103,16 @@ angular.module('platformWebApp')
     };
 
     authContext.logout = function () {
-        authDataStorage.clearStoredData();
-        $http.get(serviceBase + 'logout');
-        changeAuth({});
+        var externalSignInData = externalSignInStorage.get();
+        if (externalSignInData && externalSignInData.providerType) {
+            externalSignInStorage.remove();
+            $window.location.href = 'externalsignin/signout?authenticationType=' + externalSignInData.providerType;
+        }
+        else {
+            authDataStorage.clearStoredData();
+            changeAuth({});
+            $http.get(serviceBase + 'logout');
+        }
     };
 
     authContext.checkPermission = function (permission, securityScopes) {

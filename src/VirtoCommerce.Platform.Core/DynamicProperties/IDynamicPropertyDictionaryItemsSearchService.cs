@@ -1,9 +1,8 @@
-using System.Threading.Tasks;
+using VirtoCommerce.Platform.Core.GenericCrud;
 
 namespace VirtoCommerce.Platform.Core.DynamicProperties
 {
-    public interface IDynamicPropertyDictionaryItemsSearchService
+    public interface IDynamicPropertyDictionaryItemsSearchService : ISearchService<DynamicPropertyDictionaryItemSearchCriteria, DynamicPropertyDictionaryItemSearchResult, DynamicPropertyDictionaryItem>
     {
-        Task<DynamicPropertyDictionaryItemSearchResult> SearchDictionaryItemsAsync(DynamicPropertyDictionaryItemSearchCriteria criteria);
     }
 }

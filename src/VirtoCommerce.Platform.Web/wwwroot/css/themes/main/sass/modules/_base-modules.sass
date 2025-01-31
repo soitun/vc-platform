@@ -167,6 +167,9 @@ ol
 .menu.__context.open,
 .menu.__context.__open
   display: block
+  max-height: 70vh
+  overflow-y: auto
+  z-index: 10000
 
 .splited-element:last-child
   border-top-color: white
@@ -194,6 +197,8 @@ ol
     word-wrap: break-word
     // web-kit only
     word-break: break-word
+  .list-descr-white-space
+    white-space: pre-wrap
   .alert
     color: $genericErrorColor
   .list-link
@@ -251,7 +256,7 @@ h3
   line-height: 1
 
 .t
-  font-size: 32px
+  font-size: 26px
 
 .sub-t
   font-size: 24px
@@ -506,10 +511,10 @@ h3
   vertical-align: middle
 
 /* UI Grid */
-@import "modules/_ui-grid.sass"
+@import "_ui-grid.sass"
 
 /* Forms */
-@import "modules/_forms.sass"
+@import "_forms.sass"
 
 /* Tiles */
 .tile-group
@@ -787,7 +792,7 @@ $names: "", ".double", ".triple", ".quadro"
 .__items .list-item:after
   display: none
 .__items .list-item.__more:before
-  background: url('/images/navbar/more.svg') no-repeat
+  background: url('../../../../images/navbar/more.svg') no-repeat
   color: $colorText
   float: left
   font-family: $fontAw
@@ -1408,7 +1413,7 @@ $names: "", ".double", ".triple", ".quadro"
 .select2-container-multi
   .select2-choices
     line-height: 32px
-    padding: 0px 10px 10px 4px;
+    padding: 0px 10px 10px 4px
 .select2-container .select2-choice,
 .select2-drop
   border-radius: 0
@@ -1463,11 +1468,11 @@ $names: "", ".double", ".triple", ".quadro"
   box-shadow: none
   font-size: 13px
   line-height: 1
-  margin: 10px 0 0px 10px;
+  margin: 10px 0 0px 10px
   padding: 6px 30px 6px 5px
   z-index: 49
   &.btn-default
-    background: $baseColor url('/images/layout/plus.svg') no-repeat right center
+    background: $baseColor url('../../../../images/layout/plus.svg') no-repeat right center
     background-size: 10px
     background-position-x: 35px
     border-radius: 2px
@@ -1475,8 +1480,14 @@ $names: "", ".double", ".triple", ".quadro"
     height: 19px
     padding: 6px 20px 0 7px
 .select2-container-multi .select2-choices .select2-search-field
+  width: -moz-available
+  width: -webkit-fill-available
+  width: fill-available
   input
+    width: inherit !important
     padding: 7px 10px 7px 5px
+    margin: 14px 1px 1px 10px
+    border: 1px solid $baseBrd
 .select2-search-choice-close
   left: auto !important
   top: 6px
@@ -1498,6 +1509,8 @@ $names: "", ".double", ".triple", ".quadro"
     &:hover
       &::after
         color: $baseColor
+.select2-container-multi .select2-search-choice-close
+  background: none !important
 .select2-container-multi .select2-search-choice-close::after,
 .select2-container-multi .select2-search-choice-close:hover::after
   color: #a1c0d4
@@ -1508,6 +1521,9 @@ $names: "", ".double", ".triple", ".quadro"
 .select2-container .select2-search input,
 .select2-container .select2-choice .select2-arrow b
   background-image: none !important
+
+.ui-select-choices.ui-select-choices-content.select2-results
+  margin: 4px 10px 4px 10px
 
 /* Tags input */
 tags-input
@@ -1903,7 +1919,7 @@ tags-input
           width: 47%
           margin-right: 16px
       .form-input .btn
-        background: url(/images/layout/remove.svg) no-repeat content-box center
+        background: url(../../../../images/layout/remove.svg) no-repeat content-box center
         min-width: 34px
       .filter-edit
         font-size: 17px
@@ -2068,12 +2084,12 @@ tags-input
   > ul
     height: 100%
   > .list.__editing
-    background: url(/images/grid.png) repeat scroll 0 0
+    background: url(../../../../images/grid.png) repeat scroll 0 0
   gridster-item,
   .list-item
     background: $lightBg
     box-sizing: border-box
-    box-shadow: 0 0 0 2px #dee9f0 inset
+    box-shadow: 0 0 0 1px #dee9f0 inset
     padding: 2px
     position: absolute
     text-align: center
@@ -2081,19 +2097,19 @@ tags-input
       box-shadow: 0 0 0 2px #a1c0d4 inset
   .list-item.error
     background: #f2dede
-    box-shadow: 0 0 0 2px #ebccd1 inset
+    box-shadow: 0 0 0 1px #ebccd1 inset
     color: #e0a9a9
   .list-item.success
     background: #dff0d8
-    box-shadow: 0 0 0 2px #d6e9c6 inset
+    box-shadow: 0 0 0 1px #d6e9c6 inset
     color: #b2e0a9
   .list-item.warning
     background: #fcf8e3
-    box-shadow: 0 0 0 2px #faebcc inset
+    box-shadow: 0 0 0 1px #faebcc inset
     color: #e0d8a9
   .list-item.info
     background: #d9edf7
-    box-shadow: 0 0 0 2px #bce8f1 inset
+    box-shadow: 0 0 0 1px #bce8f1 inset
     color: #a9d1e0
   .gridster-item-moving
     opacity: .7

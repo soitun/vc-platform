@@ -1,5 +1,5 @@
 {
-    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
         "appServiceName": {
@@ -10,7 +10,7 @@
         },
         "appServicePlanSkuName": {
             "type": "string",
-            "defaultValue": "S1",
+            "defaultValue": "B2",
             "allowedValues": [
                 "F1",
                 "D1",
@@ -83,7 +83,10 @@
                 "name": "[variables('storageType')]",
                 "tier": "Standard"
             },
-            "kind": "StorageV2"
+            "kind": "StorageV2",
+            "properties": {
+                "allowBlobPublicAccess": true
+                }
         },
         {
             "apiVersion": "2014-04-01",
@@ -197,7 +200,7 @@
                         },
                         {
                             "name": "WEBSITE_NODE_DEFAULT_VERSION",
-                            "value": "12.18.0"
+                            "value": "~18"
                         }
                     ],
                     "connectionStrings": [
@@ -210,9 +213,10 @@
                     "metadata": [
                         {
                             "name": "CURRENT_STACK",
-                            "value": "dotnetcore"
+                            "value": "dotnet"
                         }
                     ],
+                    "netFrameworkVersion": "v8.0",
                     "virtualApplications": [
                         {
                             "virtualPath": "/",

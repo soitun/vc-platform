@@ -1,17 +1,13 @@
 using System.Linq;
-using System.Threading.Tasks;
 using Hangfire;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using VirtoCommerce.Platform.Core;
-using VirtoCommerce.Platform.Core.Bus;
 using VirtoCommerce.Platform.Core.Common;
+using VirtoCommerce.Platform.Core.Events;
 using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.Platform.Core.Security.Events;
-using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.Platform.Hangfire;
-using VirtoCommerce.Platform.Hangfire.Extensions;
 using VirtoCommerce.Platform.Security.Handlers;
 using VirtoCommerce.Platform.Web.Security.BackgroundJobs;
 
@@ -19,7 +15,6 @@ namespace VirtoCommerce.Platform.Web.Security
 {
     public static class ApplicationBuilderExtensions
     {
-
         public static IApplicationBuilder UsePlatformPermissions(this IApplicationBuilder appBuilder)
         {
             //Register PermissionScope type itself to prevent Json serialization error due that fact that will be taken from other derived from PermissionScope type (first in registered types list) in PolymorphJsonContractResolver
@@ -32,15 +27,16 @@ namespace VirtoCommerce.Platform.Web.Security
 
         public static IApplicationBuilder UseSecurityHandlers(this IApplicationBuilder appBuilder)
         {
-            var inProcessBus = appBuilder.ApplicationServices.GetService<IHandlerRegistrar>();
-            inProcessBus.RegisterHandler<UserChangedEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<LogChangesUserChangedEventHandler>().Handle(message));
-            inProcessBus.RegisterHandler<UserChangedEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<UserApiKeyActualizeEventHandler>().Handle(message));
-            inProcessBus.RegisterHandler<UserPasswordChangedEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<LogChangesUserChangedEventHandler>().Handle(message));
-            inProcessBus.RegisterHandler<UserResetPasswordEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<LogChangesUserChangedEventHandler>().Handle(message));
-            inProcessBus.RegisterHandler<UserLoginEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<LogChangesUserChangedEventHandler>().Handle(message));
-            inProcessBus.RegisterHandler<UserLogoutEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<LogChangesUserChangedEventHandler>().Handle(message));
-            inProcessBus.RegisterHandler<UserRoleAddedEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<LogChangesUserChangedEventHandler>().Handle(message));
-            inProcessBus.RegisterHandler<UserRoleRemovedEvent>(async (message, token) => await appBuilder.ApplicationServices.GetService<LogChangesUserChangedEventHandler>().Handle(message));
+            appBuilder.RegisterEventHandler<UserChangedEvent, UserApiKeyActualizeEventHandler>();
+
+            appBuilder.RegisterEventHandler<UserChangedEvent, LogChangesUserChangedEventHandler>();
+            appBuilder.RegisterEventHandler<UserPasswordChangedEvent, LogChangesUserChangedEventHandler>();
+            appBuilder.RegisterEventHandler<UserResetPasswordEvent, LogChangesUserChangedEventHandler>();
+            appBuilder.RegisterEventHandler<UserChangedPasswordEvent, LogChangesUserChangedEventHandler>();
+            appBuilder.RegisterEventHandler<UserLoginEvent, LogChangesUserChangedEventHandler>();
+            appBuilder.RegisterEventHandler<UserLogoutEvent, LogChangesUserChangedEventHandler>();
+            appBuilder.RegisterEventHandler<UserRoleAddedEvent, LogChangesUserChangedEventHandler>();
+            appBuilder.RegisterEventHandler<UserRoleRemovedEvent, LogChangesUserChangedEventHandler>();
 
             return appBuilder;
         }
@@ -52,11 +48,9 @@ namespace VirtoCommerce.Platform.Web.Security
         /// <returns></returns>
         public static IApplicationBuilder UsePruneExpiredTokensJob(this IApplicationBuilder appBuilder)
         {
-            var recurringJobManager = appBuilder.ApplicationServices.GetService<IRecurringJobManager>();
-            var settingsManager = appBuilder.ApplicationServices.GetService<ISettingsManager>();
+            var recurringJobService = appBuilder.ApplicationServices.GetService<IRecurringJobService>();
 
-            recurringJobManager.WatchJobSetting(
-                settingsManager,
+            recurringJobService.WatchJobSetting(
                 new SettingCronJobBuilder()
                     .SetEnablerSetting(PlatformConstants.Settings.Security.EnablePruneExpiredTokensJob)
                     .SetCronSetting(PlatformConstants.Settings.Security.CronPruneExpiredTokensJob)
@@ -66,36 +60,24 @@ namespace VirtoCommerce.Platform.Web.Security
             return appBuilder;
         }
 
-        public static async Task<IApplicationBuilder> UseDefaultUsersAsync(this IApplicationBuilder appBuilder)
+        /// <summary>
+        /// Schedule a periodic job to lock out accounts whose last login date is older than the configured one
+        /// </summary>
+        /// <param name="appBuilder"></param>
+        /// <param name="lockoutOptions"></param>
+        /// <returns></returns>
+        public static IApplicationBuilder UseAutoAccountsLockoutJob(this IApplicationBuilder appBuilder, LockoutOptionsExtended lockoutOptions)
         {
-            using (var scope = appBuilder.ApplicationServices.GetRequiredService<IServiceScopeFactory>().CreateScope())
+            if (lockoutOptions.AutoAccountsLockoutJobEnabled)
             {
-                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-
-
-                if (await userManager.FindByNameAsync("admin") == null)
-                {
-#pragma warning disable S2068 // disable check: 'password' detected in this expression, review this potentially hardcoded credential
-                    var admin = new ApplicationUser
-                    {
-                        Id = "1eb2fa8ac6574541afdb525833dadb46",
-                        IsAdministrator = true,
-                        UserName = "admin",
-                        PasswordHash = "AHQSmKnSLYrzj9vtdDWWnUXojjpmuDW2cHvWloGL9UL3TC9UCfBmbIuR2YCyg4BpNg==",
-                        PasswordExpired = true,
-                        Email = "admin@vc-demostore.com"
-                    };
-#pragma warning restore S2068 // disable check: 'password' detected in this expression, review this potentially hardcoded credential
-                    var adminUser = await userManager.FindByIdAsync(admin.Id);
-                    if (adminUser == null)
-                    {
-                        await userManager.CreateAsync(admin);
-                    }
-                }
-
+                RecurringJob.AddOrUpdate<AutoAccountLockoutJob>("AutoAccountLockoutJob", j => j.Process(), lockoutOptions.CronAutoAccountsLockoutJob);
             }
+            else
+            {
+                RecurringJob.RemoveIfExists("AutoAccountLockoutJob");
+            }
+
             return appBuilder;
         }
     }
-
 }

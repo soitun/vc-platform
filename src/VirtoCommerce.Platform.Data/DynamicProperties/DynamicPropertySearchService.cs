@@ -24,11 +24,7 @@ namespace VirtoCommerce.Platform.Data.DynamicProperties
             _memoryCache = memoryCache;
         }
 
-
-        #region IDynamicPropertySearchService members
-
-
-        public virtual Task<DynamicPropertySearchResult> SearchDynamicPropertiesAsync(DynamicPropertySearchCriteria criteria)
+        public Task<DynamicPropertySearchResult> SearchAsync(DynamicPropertySearchCriteria criteria, bool clone = true)
         {
             var cacheKey = CacheKey.With(GetType(), "SearchDynamicPropertiesAsync", criteria.GetCacheKey());
             return _memoryCache.GetOrCreateExclusiveAsync(cacheKey, async (cacheEntry) =>
@@ -80,6 +76,5 @@ namespace VirtoCommerce.Platform.Data.DynamicProperties
                 return result;
             });
         }
-        #endregion
     }
 }

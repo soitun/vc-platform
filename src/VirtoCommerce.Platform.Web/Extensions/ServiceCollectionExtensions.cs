@@ -4,9 +4,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.Modularity;
 using VirtoCommerce.Platform.Modules.External;
+using VirtoCommerce.Platform.Web;
 
 namespace VirtoCommerce.Platform.Modules
 {
@@ -28,16 +30,26 @@ namespace VirtoCommerce.Platform.Modules
             {
                 services.Configure(setupAction);
             }
-            
+
             var providerSnapshot = services.BuildServiceProvider();
 
             var manager = providerSnapshot.GetRequiredService<IModuleManager>();
             var moduleCatalog = providerSnapshot.GetRequiredService<ILocalModuleCatalog>();
 
             manager.Run();
+
             // Ensure all modules are loaded
-            foreach (var module in moduleCatalog.Modules.OfType<ManifestModuleInfo>().Where(x => x.State == ModuleState.NotStarted).ToArray())
+            Log.ForContext<Startup>().Information("Registering API controllers");
+
+            var notStartedModules = moduleCatalog.Modules.Where(x => x.State == ModuleState.NotStarted);
+            var modules = moduleCatalog.CompleteListWithDependencies(notStartedModules)
+                .OfType<ManifestModuleInfo>()
+                .ToArray();
+
+            for (var i = 0; i < modules.Length; i++)
             {
+                var module = modules[i];
+
                 manager.LoadModule(module.ModuleName);
 
                 // VP-2190: No need to add parts for modules with laoding errors - it could cause an exception

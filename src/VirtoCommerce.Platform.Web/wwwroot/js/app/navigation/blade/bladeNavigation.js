@@ -207,10 +207,14 @@ angular.module('platformWebApp')
                         dialog.message = scope.blade.errorBody;
                     dialogService.showErrorDialog(dialog);
                 };
+
+                scope.clearError = function () {
+                    bladeNavigationService.clearError(scope.blade);
+                };
             }
         }
     }])
-    .factory('platformWebApp.bladeNavigationService', ['platformWebApp.authService', '$timeout', '$state', 'platformWebApp.dialogService', function (authService, $timeout, $state, dialogService) {
+    .factory('platformWebApp.bladeNavigationService', ['platformWebApp.authService', '$timeout', '$state', '$translate', 'platformWebApp.dialogService', function (authService, $timeout, $state, $translate, dialogService) {
         function showConfirmationIfNeeded(showConfirmation, canSave, blade, saveChangesCallback, closeCallback, saveTitle, saveMessage) {
             if (showConfirmation) {
                 var dialog = { id: "confirmCurrentBladeClose" };
@@ -238,6 +242,14 @@ angular.module('platformWebApp')
             }
             else {
                 closeCallback();
+            }
+        }
+
+        function clearError(blade) {
+            if (blade) {
+                blade.isLoading = false;
+                blade.error = undefined;
+                blade.errorBody = "";
             }
         }
 
@@ -405,11 +417,30 @@ angular.module('platformWebApp')
             },
             checkPermission: authService.checkPermission,
             setError: function (response, blade) {
-                if (blade && response) {
+                if (blade) {
                     blade.isLoading = false;
-                    blade.error = response.status && response.statusText ? response.status + ': ' + response.statusText : response;
-                    blade.errorBody = response.data ? response.data.exceptionMessage || response.data.message || response.data.errors.join('<br>') : blade.errorBody || blade.error;
+                    if (response) {
+                        response.statusText = service.getStatusText(response);
+                        blade.error = response.status && response.statusText ? response.status + ': ' + response.statusText : response;
+                        blade.errorBody = response.data ? response.data.exceptionMessage || response.data.message || response.data.errors.join('<br>') : blade.errorBody || blade.error;
+                    }
+                    else {
+                        clearError(blade);
+                    }
                 }
+            },
+            clearError: clearError,
+            getStatusText: function (response) {
+                if (response.statusText === "") {
+                    var errorKey = 'platform.errors.' + response.status.toString();
+                    var result = $translate.instant(errorKey);
+                    if (errorKey === result) {
+                        result = $translate.instant('platform.errors.generic-error');
+                    }
+
+                    return result;
+                }
+                return response.statusText;
             }
         };
 
