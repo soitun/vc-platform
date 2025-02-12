@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Identity;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using VirtoCommerce.Platform.Core.Common;
 using VirtoCommerce.Platform.Core.Utils.ChangeDetector;
 
@@ -16,17 +14,17 @@ namespace VirtoCommerce.Platform.Core.Security
         /// </summary>
         public virtual string StoreId { get; set; }
 
-        [DetectChangesAttribute(PlatformConstants.Security.Changes.UserUpdated)]
+        [DetectChanges(PlatformConstants.Security.Changes.UserUpdated)]
         public virtual string MemberId { get; set; }
 
-        [DetectChangesAttribute(PlatformConstants.Security.Changes.UserUpdated)]
+        [DetectChanges(PlatformConstants.Security.Changes.UserUpdated)]
         public virtual bool IsAdministrator { get; set; }
         public virtual string PhotoUrl { get; set; }
 
-        [DetectChangesAttribute(PlatformConstants.Security.Changes.UserUpdated)]
+        [DetectChanges(PlatformConstants.Security.Changes.UserUpdated)]
         public virtual string UserType { get; set; }
 
-        [DetectChangesAttribute(PlatformConstants.Security.Changes.UserUpdated)]
+        [DetectChanges(PlatformConstants.Security.Changes.UserUpdated)]
         public virtual string Status { get; set; }
         public virtual string Password { get; set; }
         public virtual DateTime CreatedDate { get; set; }
@@ -37,32 +35,6 @@ namespace VirtoCommerce.Platform.Core.Security
 
         [SwaggerIgnore]
         public virtual ICollection<IdentityUserRole<string>> UserRoles { get; set; }
-
-        /// <summary>
-        /// Obsolete. Use LockoutEnd. DateTime in UTC when lockout ends, any time in the past is considered not locked out.
-        /// </summary>
-        [Obsolete("Left due to compatibility issues. Use LockoutEnd")]
-        public virtual DateTime? LockoutEndDateUtc
-        {
-            get
-            {
-                return LockoutEnd?.UtcDateTime;
-            }
-            set
-            {
-                LockoutEnd = value ?? new DateTimeOffset(value.Value);
-            }
-        }
-
-        [Obsolete("Left due to compatibility issues. Will be removed. Instead of, use properties: EmailConfirmed, LockoutEnd.")]
-        [JsonConverter(typeof(StringEnumConverter))]
-        public virtual AccountState UserState { get; set; }
-
-        /// <summary>
-        /// Obsolete. All permissions from assigned roles.
-        /// </summary>
-        [Obsolete("Left due to compatibility issues")]
-        public virtual string[] Permissions { get; set; }
 
         /// <summary>
         /// External provider logins.
@@ -84,6 +56,11 @@ namespace VirtoCommerce.Platform.Core.Security
         /// </summary>
         public virtual DateTime? LastPasswordChangeRequestDate { get; set; }
 
+        /// <summary>
+        /// The last login date
+        /// </summary>
+        public virtual DateTime? LastLoginDate { get; set; }
+
         public virtual void Patch(ApplicationUser target)
         {
             target.UserName = UserName;
@@ -99,7 +76,6 @@ namespace VirtoCommerce.Platform.Core.Security
             target.TwoFactorEnabled = TwoFactorEnabled;
             target.LockoutEnabled = LockoutEnabled;
             target.LockoutEnd = LockoutEnd;
-            target.UserState = UserState;
             target.AccessFailedCount = AccessFailedCount;
 
             target.MemberId = MemberId;
@@ -111,6 +87,7 @@ namespace VirtoCommerce.Platform.Core.Security
             target.PasswordExpired = PasswordExpired;
             target.LastPasswordChangedDate = LastPasswordChangedDate;
             target.LastPasswordChangeRequestDate = LastPasswordChangeRequestDate;
+            target.LastLoginDate = LastLoginDate;
         }
 
         public virtual ListDictionary<string, string> DetectUserChanges(ApplicationUser oldUser)
@@ -132,7 +109,17 @@ namespace VirtoCommerce.Platform.Core.Security
 
             if (newUser.PasswordHash != oldUser.PasswordHash)
             {
-                result.Add(PlatformConstants.Security.Changes.UserPasswordChanged, $"Password changed");
+                result.Add(PlatformConstants.Security.Changes.UserPasswordChanged, "Password changed");
+            }
+
+            if (newUser.LockoutEnd.IsEmpty() && !oldUser.LockoutEnd.IsEmpty())
+            {
+                result.Add(PlatformConstants.Security.Changes.UserUpdated, "User unlocked");
+            }
+
+            if (!newUser.LockoutEnd.IsEmpty() && oldUser.LockoutEnd.IsEmpty())
+            {
+                result.Add(PlatformConstants.Security.Changes.UserUpdated, "User locked");
             }
 
             return result;
@@ -142,7 +129,7 @@ namespace VirtoCommerce.Platform.Core.Security
 
         public virtual object Clone()
         {
-            var result = MemberwiseClone() as ApplicationUser;
+            var result = (ApplicationUser)MemberwiseClone();
 
             result.Roles = Roles?.Select(x => x.Clone()).OfType<Role>().ToList();
 

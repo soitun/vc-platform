@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.OpenApi.Models;
-using Mvc.Server;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using VirtoCommerce.Platform.Web.Controllers.Api;
 
 namespace VirtoCommerce.Platform.Web.Swagger
 {
@@ -32,7 +32,9 @@ namespace VirtoCommerce.Platform.Web.Swagger
                     { "grant_type", new OpenApiSchema() { Type = "string" } },
                     { "scope", new OpenApiSchema() { Type = "string" } },
                     { "username", new OpenApiSchema() { Type = "string" } },
-                    { "password", new OpenApiSchema() { Type = "string" } }
+                    { "password", new OpenApiSchema() { Type = "string" } },
+                    { "storeId", new OpenApiSchema() { Type = "string" } },
+                    { "user_id", new OpenApiSchema() { Type = "string" } },
                 };
                 mediaType.Schema.Required = new HashSet<string>
                 {

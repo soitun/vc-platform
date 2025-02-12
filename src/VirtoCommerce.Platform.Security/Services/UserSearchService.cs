@@ -68,6 +68,16 @@ namespace VirtoCommerce.Platform.Security.Services
                 query = query.Where(x => x.UserRoles.Any(r => rolesIds.Contains(r.RoleId)));
             }
 
+            if (criteria.LasLoginDate != null && criteria.LasLoginDate != default(DateTime))
+            {
+                query = query.Where(x => x.LastLoginDate != null && x.LastLoginDate <= criteria.LasLoginDate);
+            }
+
+            if (criteria.OnlyUnlocked)
+            {
+                query = query.Where(x => x.LockoutEnabled && (x.LockoutEnd == null || x.LockoutEnd <= DateTime.UtcNow));
+            }
+
             result.TotalCount = await query.CountAsync();
 
             var sortInfos = criteria.SortInfos;
@@ -75,7 +85,13 @@ namespace VirtoCommerce.Platform.Security.Services
             {
                 sortInfos = new[] { new SortInfo { SortColumn = ReflectionUtility.GetPropertyName<ApplicationUser>(x => x.UserName), SortDirection = SortDirection.Descending } };
             }
-            result.Results = await query.OrderBySortInfos(sortInfos).Skip(criteria.Skip).Take(criteria.Take).ToArrayAsync();
+
+            result.Results = await query
+                .OrderBySortInfos(sortInfos)
+                .Skip(criteria.Skip)
+                .Take(criteria.Take)
+                .AsSplitQuery()
+                .ToArrayAsync();
 
             foreach (var user in result.Results)
             {

@@ -1,5 +1,3 @@
-const { log } = require("gulp-util");
-
 angular.module('platformWebApp')
     .config(['$stateProvider', '$httpProvider', function ($stateProvider, $httpProvider) {
         $stateProvider.state('loginDialog',
@@ -7,23 +5,17 @@ angular.module('platformWebApp')
                 url: '/login',
                 templateUrl: '$(Platform)/Scripts/app/security/login/login.tpl.html',
                 controller: [
-                    '$scope', '$window', '$translate', 'platformWebApp.authService', 'platformWebApp.externalSignInService', 'platformWebApp.login',
-                    function ($scope, $window, $translate, authService, externalSignInService, loginResources) {
+                    '$scope', '$window', '$translate', 'platformWebApp.authService', 'platformWebApp.externalSignInService', 'platformWebApp.login', 'platformWebApp.externalSignInStorage',
+                    function ($scope, $window, $translate, authService, externalSignInService, loginResources, externalSignInStorage) {
                         $scope.loginProviders = [];
-                        $scope.defaultLoginType = 'Password';
                         $scope.showPassword = false;
+                        $scope.showPlainLogin = true;
 
                         loginResources.getLoginTypes({}, function (loginTypes) {
-                            // filter out inactive
-                            loginTypes = _.filter(loginTypes, function (loginTypeFilter) {
-                                return loginTypeFilter.enabled;
+                            var passwordLogin = _.find(loginTypes, function (loginTypeFilter) {
+                                return loginTypeFilter.authenticationType === 'Password';
                             });
-
-                            // order by login type by priority
-                            var loginType = _.first(_.sortBy(loginTypes, function (loginTypeSort) {
-                                return loginTypeSort.priority;
-                            }));
-                            $scope.currentType = loginType.authenticationType;
+                            $scope.showPlainLogin = !!passwordLogin && passwordLogin.enabled;
 
                             externalSignInService.getProviders().then(
                                 function (response) {
@@ -36,74 +28,54 @@ angular.module('platformWebApp')
                                         provider.hasTemplate = !!type;
                                     });
                                     $scope.loginProviders = response.data;
+                                });
+                        });
 
-                                    var passwordType = _.find(loginTypes, function (loginTypeFindPass) {
-                                        return loginTypeFindPass.authenticationType === $scope.defaultLoginType;
-                                    });
+                        $scope.user = {};
+                        $scope.authError = null;
+                        $scope.authReason = false;
+                        $scope.loginProgress = false;
 
-                                    // add login type to the list if enabled
-                                    if (passwordType && $scope.loginProviders.length) {
-                                        // can't use $translate.instant() here because localization might not yet be initialized
-                                        $translate('platform.blades.login.labels.password-log-in-type').then(function (result) {
-                                            $scope.loginProviders.push({
-                                                authenticationType: $scope.defaultLoginType,
-                                                displayName: result,
-                                                hasTemplate: true
-                                            });
-                                        });
+                        $scope.externalLogin = function (provider) {
+                            // set external signIn data
+                            var signInData = {
+                                providerType: provider.authenticationType
+                            };
+                            externalSignInStorage.set(signInData);
+
+                            var url = 'externalsignin?authenticationType=' + provider.authenticationType;
+                            $window.location.href = url;
+                        };
+
+                        $scope.ok = function () {
+                            // Clear any previous security errors
+                            $scope.authError = null;
+                            $scope.loginProgress = true;
+                            // Try to login
+                            authService.login($scope.user.email, $scope.user.password, $scope.user.remember).then(
+                                function (result) {
+                                    $scope.loginProgress = false;
+                                    if (!result || !result.succeeded) {
+                                        $scope.authError = 'The login or password is incorrect.';
+                                    }
+                                },
+                                function (x) {
+                                    $scope.loginProgress = false;
+                                    if (angular.isDefined(x.status)) {
+                                        if (x.status === 401) {
+                                            $scope.authError = 'The login or password is incorrect.';
+                                        } else {
+                                            $scope.authError = 'Authentication error (code: ' + x.status + ').';
+                                        }
+                                    } else {
+                                        $scope.authError = 'Authentication error ' + x;
                                     }
                                 });
+                        };
 
-                            $scope.user = {};
-                            $scope.authError = null;
-                            $scope.authReason = false;
-                            $scope.loginProgress = false;
-
-                            $scope.switchLogin = function (provider) {
-                                // navigate to external endpoint or switch login template
-                                if (provider.hasTemplate) {
-                                    $scope.currentType = provider.authenticationType;
-                                }
-                                else {
-                                    $scope.externalLogin(provider.authenticationType);
-                                }
-                            }
-
-                            $scope.externalLogin = function (providerType) {
-                                var url = 'externalsignin?authenticationType=' + providerType;
-                                $window.location.href = url
-                            };
-
-                            $scope.ok = function () {
-                                // Clear any previous security errors
-                                $scope.authError = null;
-                                $scope.loginProgress = true;
-                                // Try to login
-                                authService.login($scope.user.email, $scope.user.password, $scope.user.remember).then(
-                                    function (loggedIn) {
-                                        $scope.loginProgress = false;
-                                        if (!loggedIn) {
-                                            $scope.authError = 'invalidCredentials';
-                                        }
-                                    },
-                                    function (x) {
-                                        $scope.loginProgress = false;
-                                        if (angular.isDefined(x.status)) {
-                                            if (x.status === 401) {
-                                                $scope.authError = 'The login or password is incorrect.';
-                                            } else {
-                                                $scope.authError = 'Authentication error (code: ' + x.status + ').';
-                                            }
-                                        } else {
-                                            $scope.authError = 'Authentication error ' + x;
-                                        }
-                                    });
-                            };
-
-                            $scope.togglePassword = function() {
-                                $scope.showPassword = !$scope.showPassword;
-                            }
-                        });
+                        $scope.togglePassword = function () {
+                            $scope.showPassword = !$scope.showPassword;
+                        };
                     }
                 ]
             });
@@ -180,7 +152,7 @@ angular.module('platformWebApp')
                 authService.validatepasswordresettoken($scope.viewModel).then(function (retVal) {
                     $scope.isValidToken = retVal;
                     $scope.isLoading = false;
-                    $scope.viewModel = { userId: $scope.viewModel.userId, code: $scope.viewModel.code, newPassword: '', newPassword2: '' }
+                    $scope.viewModel = { userId: $scope.viewModel.userId, code: $scope.viewModel.code, newPassword: '', newPassword2: '' };
                 }, function (response) {
                     $scope.isLoading = false;
                     $scope.errors = response.data.errors;
@@ -226,6 +198,14 @@ angular.module('platformWebApp')
                     onClose: null
                 },
                 controller: 'platformWebApp.changePasswordDialog'
+            })
+
+            .state('contact-admin', {
+                url: '/contact-admin',
+                templateUrl: '$(Platform)/Scripts/app/security/dialogs/contact-admin.tpl.html',
+                controller: ['$scope', 'platformWebApp.authService', function ($scope, authService) {
+                    $scope.logout = authService.logout;
+                }]
             });
     }])
 
@@ -340,11 +320,11 @@ angular.module('platformWebApp')
                 template: '$(Platform)/Scripts/app/security/widgets/accountApiWidget.tpl.html',
             }, 'accountDetail');
 
-            
+
             $transitions.onBefore({ to: 'workspace.**' }, function (transition) {
                 // Prevent transition to workspace if password expired
                 if (authService.isAuthenticated && authService.passwordExpired) {
                     return transition.router.stateService.target('changePasswordDialog');
-                }               
+                }
             });
         }]);

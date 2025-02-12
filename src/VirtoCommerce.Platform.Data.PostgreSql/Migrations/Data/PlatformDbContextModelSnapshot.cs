@@ -17,10 +17,55 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Data
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "6.0.0")
+                .HasAnnotation("ProductVersion", "8.0.2")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("VirtoCommerce.Platform.Data.Localizations.LocalizedItemEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Alias")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LanguageCode")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name", "Alias")
+                        .HasDatabaseName("IX_PlatformLocalizedItem_Name_Alias");
+
+                    b.ToTable("PlatformLocalizedItem", (string)null);
+                });
 
             modelBuilder.Entity("VirtoCommerce.Platform.Data.Model.DynamicPropertyDictionaryItemEntity", b =>
                 {
@@ -44,6 +89,7 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Data
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Name")
+                        .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
@@ -326,7 +372,7 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Data
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("DecimalValue")
-                        .HasColumnType("numeric(18,5)");
+                        .HasColumnType("decimal(18,5)");
 
                     b.Property<int>("IntegerValue")
                         .HasColumnType("integer");
@@ -342,6 +388,7 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Data
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("SettingId")
+                        .IsRequired()
                         .HasColumnType("character varying(128)");
 
                     b.Property<string>("ShortTextValue")
@@ -395,7 +442,8 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Data
                     b.HasOne("VirtoCommerce.Platform.Data.Model.SettingEntity", "Setting")
                         .WithMany("SettingValues")
                         .HasForeignKey("SettingId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Setting");
                 });

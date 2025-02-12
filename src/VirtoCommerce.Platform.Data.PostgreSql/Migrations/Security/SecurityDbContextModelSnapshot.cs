@@ -17,7 +17,7 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Security
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "6.0.0")
+                .HasAnnotation("ProductVersion", "8.0.8")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -142,12 +142,20 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Security
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text");
 
+                    b.Property<string>("ApplicationType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("ClientId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("ClientSecret")
                         .HasColumnType("text");
+
+                    b.Property<string>("ClientType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("ConcurrencyToken")
                         .IsConcurrencyToken()
@@ -162,6 +170,9 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Security
                         .HasColumnType("text");
 
                     b.Property<string>("DisplayNames")
+                        .HasColumnType("text");
+
+                    b.Property<string>("JsonWebKeySet")
                         .HasColumnType("text");
 
                     b.Property<string>("Permissions")
@@ -179,9 +190,8 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Security
                     b.Property<string>("Requirements")
                         .HasColumnType("text");
 
-                    b.Property<string>("Type")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                    b.Property<string>("Settings")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -363,6 +373,9 @@ namespace VirtoCommerce.Platform.Data.PostgreSql.Migrations.Security
 
                     b.Property<bool>("IsAdministrator")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastLoginDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("LastPasswordChangeRequestDate")
                         .HasColumnType("timestamp with time zone");

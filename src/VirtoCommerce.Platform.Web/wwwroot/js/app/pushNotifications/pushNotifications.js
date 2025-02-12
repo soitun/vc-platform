@@ -57,12 +57,12 @@ angular.module('platformWebApp').config(
             //action executed in event detail
             action: function (notify) {
                 var blade = {
-                    id: 'notifyDetail',
-                    title: 'platform.blades.historyDetailDefault.title',
+                    id: 'pushNotificationDetail',
+                    title: notify.title,
                     subtitle: 'platform.blades.historyDetailDefault.subtitle',
                     template: '$(Platform)/Scripts/app/pushNotifications/blade/historyDetailDefault.tpl.html',
-                    isClosingDisabled: false,
-                    notify: notify
+                    controller: 'platformWebApp.pushNotifications.historyDetailDefaultController',
+                    notification: notify
                 };
                 bladeNavigationService.showBlade(blade);
             }
@@ -86,7 +86,7 @@ angular.module('platformWebApp').config(
             });
 
             return {
-                // fake method to ensure that pushNotificationService is referenced and static code analyzer won't mark the service as unused
-                startListening: () => true
+                startListening: clientPushHubProxy.connect,
+                stopListening: clientPushHubProxy.disconnect,
             };
         }]);

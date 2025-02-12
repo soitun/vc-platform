@@ -1,10 +1,8 @@
-using System.Threading.Tasks;
-using VirtoCommerce.Platform.Core.Common;
+using VirtoCommerce.Platform.Core.GenericCrud;
 
 namespace VirtoCommerce.Platform.Core.Settings
 {
-    public interface ISettingsSearchService
+    public interface ISettingsSearchService : ISearchService<SettingsSearchCriteria, SettingsSearchResult, ObjectSettingEntry>
     {
-        Task<GenericSearchResult<ObjectSettingEntry>> SearchSettingsAsync(SettingsSearchCriteria searchCriteria);
     }
 }

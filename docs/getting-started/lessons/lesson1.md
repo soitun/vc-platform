@@ -2,7 +2,7 @@
 title: Lesson 1 - How to deploy and configure Virto Commerce
 description: Lesson 1 - How to deploy and configure Virto Commerce
 layout: docs
-date: 2021-09-21
+date: 2024-01-12
 priority: 1
 ---
 ## Summary
@@ -15,10 +15,9 @@ Use this guide to [deploy](https://virtocommerce.com/ecommerce-hosting) and conf
 
 ## Prerequisites
 
-* [Microsoft SQL Server 2017 or later](https://www.microsoft.com/en-us/evalcenter/evaluate-sql-server-2017-rtm) with SQL Management Studio(free MS SQL Express would be enough)
-* [Visual C++ Redistributable Packages for Visual Studio](https://go.microsoft.com/fwlink/?LinkId=746572)
-* [Prerequisites for .NET Core 3.1 on Windows](https://docs.microsoft.com/en-us/dotnet/core/install/windows?tabs=netcore31#dependenciess)
-* [.NET Core 3.1 Runtime](https://dotnet.microsoft.com/download/dotnet/3.1/runtime)
+* [Microsoft SQL Server 2019 or later](https://www.microsoft.com/en-us/sql-server/) with SQL Management Studio(free MS SQL Express would be enough)
+* [Prerequisites for .NET 8 on Windows](https://learn.microsoft.com/en-us/dotnet/core/install/windows)
+* [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime)
 
 ## Initial configuration of Virto Commerce Platform (backend)
 

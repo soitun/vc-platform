@@ -9,7 +9,7 @@ using VirtoCommerce.Platform.Core.Modularity.Exceptions;
 namespace VirtoCommerce.Platform.Modules
 {
     /// <summary>
-    /// Component responsible for coordinating the modules' type loading and module initialization process. 
+    /// Component responsible for coordinating the modules' type loading and module initialization process.
     /// </summary>
     public class ModuleManager : IModuleManager, IDisposable
     {
@@ -76,7 +76,11 @@ namespace VirtoCommerce.Platform.Modules
         /// </summary>
         public void Run()
         {
+            _loggerFacade.LogInformation("Initializing module catalog");
+
             this.ModuleCatalog.Initialize();
+
+            _loggerFacade.LogInformation("Loading modules");
 
             this.LoadModulesWhenAvailable();
         }
@@ -108,8 +112,8 @@ namespace VirtoCommerce.Platform.Modules
         }
 
         /// <summary>
-        /// Returns the list of registered <see cref="IModuleTypeLoader"/> instances that will be 
-        /// used to load the types of modules. 
+        /// Returns the list of registered <see cref="IModuleTypeLoader"/> instances that will be
+        /// used to load the types of modules.
         /// </summary>
         /// <value>The module type loaders.</value>
         public virtual IEnumerable<IModuleTypeLoader> ModuleTypeLoaders
@@ -152,8 +156,8 @@ namespace VirtoCommerce.Platform.Modules
 
             if (moduleInfo.State == ModuleState.NotStarted)
             {
-                // If we can instantiate the type, that means the module's assembly is already loaded into 
-                // the AppDomain and we don't need to retrieve it. 
+                // If we can instantiate the type, that means the module's assembly is already loaded into
+                // the AppDomain and we don't need to retrieve it.
                 bool isAvailable = Type.GetType(moduleInfo.ModuleType) != null;
                 if (isAvailable)
                 {
@@ -277,7 +281,7 @@ namespace VirtoCommerce.Platform.Modules
         /// <summary>
         /// Handles any exception occurred in the module type loading process,
         /// logs the error using the <see cref="ILogger"/> and throws a <see cref="ModuleTypeLoadingException"/>.
-        /// This method can be overridden to provide a different behavior. 
+        /// This method can be overridden to provide a different behavior.
         /// </summary>
         /// <param name="moduleInfo">The module metadata where the error happened.</param>
         /// <param name="exception">The exception thrown that is the cause of the current error.</param>

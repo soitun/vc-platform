@@ -7,7 +7,7 @@ window._ = _;
 import YAML from 'yamljs';
 window.YAML = YAML;
 
-import marked from 'marked';
+import { marked } from 'marked';
 window.marked = marked;
 
 import CodeMirror from 'codemirror/lib/codemirror.js';
@@ -26,7 +26,8 @@ import 'uikit/dist/js/components/htmleditor.js';
 import 'uikit/dist/css/components/htmleditor.css';
 import 'uikit/dist/css/uikit.css';
 
-import 'webpack-jquery-ui';
+import 'jquery-ui';
+import 'jquery-ui/ui/widgets/sortable';
 import 'angular';
 import '@uirouter/angularjs';
 import 'angularjs-scroll-glue';
@@ -55,7 +56,6 @@ import 'ngstorage';
 import 'textangular';
 import 'textangular/dist/textAngular-sanitize';
 import 'ng-focus-on';
-import 'modernizr';
 import 'angular-filter';
 
 import 'angular-ui-validate';
@@ -63,7 +63,6 @@ import 'angular-ui-scroll';
 import 'angular-ui-scrollpoint';
 import 'angular-ui-event';
 import 'angular-ui-mask';
-import 'angular-ui-validate';
 import 'angular-ui-indeterminate';
 import 'angular-ui-uploader';
 

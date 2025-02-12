@@ -18,7 +18,7 @@ namespace VirtoCommerce.Platform.Security.Services
             _repositoryFactory = repositoryFactory;
         }
 
-        public async Task<UserApiKeySearchResult> SearchUserApiKeysAsync(UserApiKeySearchCriteria criteria)
+        public async Task<UserApiKeySearchResult> SearchAsync(UserApiKeySearchCriteria criteria, bool clone = true)
         {
             using (var repository = _repositoryFactory())
             {

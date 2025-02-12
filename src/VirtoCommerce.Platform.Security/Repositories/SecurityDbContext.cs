@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using EntityFrameworkCore.Triggers;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using VirtoCommerce.Platform.Core.Security;
+using VirtoCommerce.Platform.Data.Infrastructure;
 using VirtoCommerce.Platform.Security.Model;
 
 namespace VirtoCommerce.Platform.Security.Repositories
@@ -25,6 +27,13 @@ namespace VirtoCommerce.Platform.Security.Repositories
             : base(options)
         {
 
+        }
+
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            base.ConfigureConventions(configurationBuilder);
+
+            configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
         }
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -64,10 +73,7 @@ namespace VirtoCommerce.Platform.Security.Repositories
             builder.Entity<Role>().Ignore(x => x.Permissions);
             builder.Entity<ApplicationUser>().Ignore(x => x.Password);
             builder.Entity<ApplicationUser>().Ignore(x => x.Roles);
-            builder.Entity<ApplicationUser>().Ignore(x => x.LockoutEndDateUtc);
-            builder.Entity<ApplicationUser>().Ignore(x => x.Permissions);
             builder.Entity<ApplicationUser>().Ignore(x => x.Logins);
-            builder.Entity<ApplicationUser>().Ignore(x => x.UserState);
             builder.Entity<ApplicationUser>().Property(x => x.UserType).HasMaxLength(stringShort);
             builder.Entity<ApplicationUser>().Property(x => x.Status).HasMaxLength(stringShort);
             builder.Entity<ApplicationUser>().Property(x => x.PhotoUrl).HasMaxLength(stringLong);

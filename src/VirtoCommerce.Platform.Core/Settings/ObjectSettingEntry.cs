@@ -20,7 +20,9 @@ namespace VirtoCommerce.Platform.Core.Settings
             AllowedValues = descriptor.AllowedValues;
             DefaultValue = descriptor.DefaultValue;
             IsDictionary = descriptor.IsDictionary;
+            IsLocalizable = descriptor.IsLocalizable;
             IsHidden = descriptor.IsHidden;
+            IsPublic = descriptor.IsPublic;
         }
         public bool ItHasValues => Value != null || !AllowedValues.IsNullOrEmpty();
         /// <summary>

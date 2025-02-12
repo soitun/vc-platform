@@ -17,7 +17,8 @@ namespace VirtoCommerce.Platform.Data.PostgreSql
         protected virtual string GetConnectionString()
         {
             return _configuration["Auth:ConnectionString"] ??
-                _configuration.GetConnectionString("VirtoCommerce");
+                _configuration.GetConnectionString("VirtoCommerce") ??
+                string.Empty;
         }
 
         /// <summary>
@@ -27,24 +28,18 @@ namespace VirtoCommerce.Platform.Data.PostgreSql
         /// <returns></returns>
         protected virtual bool CheckDatabaseExist(string sourceConnectionString)
         {
-            var builder = new NpgsqlConnectionStringBuilder(sourceConnectionString);
-            var dbName = builder.Database; // Catch database name to search from the connection string
-            builder.Remove("Database"); // Initial catalog should be removed from connection string, otherwise the connection could not be opened
-            const string cmdCheckDb =
-                @"SELECT 1 from pg_database WHERE datname = @dbName";
-            var connectionString = builder.ConnectionString;
-
-            using var conn = new NpgsqlConnection(connectionString);
-            using var commandCheckDb = conn.CreateCommand();
-            commandCheckDb.CommandText = cmdCheckDb;
-            var parameterDbName = commandCheckDb.CreateParameter();
-            parameterDbName.ParameterName = "dbName";
-            parameterDbName.Value = dbName;
-            commandCheckDb.Parameters.Add(parameterDbName);
-            conn.Open();
-            using var readerCheckDb = commandCheckDb.ExecuteReader();
-
-            return readerCheckDb.HasRows;
+            using (var connection = new NpgsqlConnection(sourceConnectionString))
+            {
+                try
+                {
+                    connection.Open();
+                    return true; // Database exists
+                }
+                catch
+                {
+                    return false; // Database doesn't exist or connection failed
+                }
+            }
         }
 
         public ServerCertificate Load()
@@ -58,14 +53,14 @@ namespace VirtoCommerce.Platform.Data.PostgreSql
                 var builder = new NpgsqlConnectionStringBuilder(connectionString);
 
                 const string cmdCheckMigration =
-                    @"select 1 from information_schema.TABLES where TABLE_SCHEMA = @dbName AND TABLE_NAME='ServerCertificate'";
+                    @"SELECT 1 FROM pg_tables
+                      WHERE
+                         schemaname = 'public' AND
+                         tablename  = 'ServerCertificate'
+                    ;";
 
                 const string cmdServerCert =
-                    @"SELECT Id
-                    ,PublicCertBase64
-                    ,PrivateKeyCertBase64
-                    ,PrivateKeyCertPassword
-                FROM ServerCertificate LIMIT 1";
+                    "SELECT \"Id\",\"PublicCertBase64\",\"PrivateKeyCertBase64\",\"PrivateKeyCertPassword\" FROM \"ServerCertificate\" LIMIT 1";
 
                 const int ixId = 0;
                 const int ixPublicCertBase64 = 1;

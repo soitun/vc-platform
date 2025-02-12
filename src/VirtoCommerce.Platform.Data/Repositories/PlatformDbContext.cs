@@ -1,12 +1,16 @@
-using EntityFrameworkCore.Triggers;
+using System;
 using Microsoft.EntityFrameworkCore;
+using VirtoCommerce.Platform.Data.Infrastructure;
+using VirtoCommerce.Platform.Data.Localizations;
 using VirtoCommerce.Platform.Data.Model;
 
 namespace VirtoCommerce.Platform.Data.Repositories
 {
-    public class PlatformDbContext : DbContextWithTriggers
+    public class PlatformDbContext : DbContextBase
     {
+        [Obsolete("Use IdLength", DiagnosticId = "VC0009", UrlFormat = "https://docs.virtocommerce.org/products/products-virto3-versions")]
         protected const int _idLength128 = 128;
+
         protected const int _idLength64 = 64;
         protected const int _idLength2048 = 2048;
 
@@ -22,9 +26,11 @@ namespace VirtoCommerce.Platform.Data.Repositories
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
+
             #region Change logging
             modelBuilder.Entity<OperationLogEntity>().ToTable("PlatformOperationLog").HasKey(x => x.Id);
-            modelBuilder.Entity<OperationLogEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<OperationLogEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<OperationLogEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<OperationLogEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<OperationLogEntity>().Property(x => x.Detail).HasMaxLength(_idLength2048);
@@ -35,7 +41,7 @@ namespace VirtoCommerce.Platform.Data.Repositories
 
             #region Settings
             modelBuilder.Entity<SettingEntity>().ToTable("PlatformSetting").HasKey(x => x.Id);
-            modelBuilder.Entity<SettingEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<SettingEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<SettingEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<SettingEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<SettingEntity>().HasIndex(x => new { x.ObjectType, x.ObjectId })
@@ -43,14 +49,15 @@ namespace VirtoCommerce.Platform.Data.Repositories
                         .HasDatabaseName("IX_ObjectType_ObjectId");
 
             modelBuilder.Entity<SettingValueEntity>().ToTable("PlatformSettingValue").HasKey(x => x.Id);
-            modelBuilder.Entity<SettingValueEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<SettingValueEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<SettingValueEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<SettingValueEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
 
             modelBuilder.Entity<SettingValueEntity>().HasOne(x => x.Setting)
                         .WithMany(x => x.SettingValues)
                         .HasForeignKey(x => x.SettingId)
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
             modelBuilder.Entity<SettingValueEntity>()
                 .Property(x => x.DecimalValue)
@@ -58,10 +65,21 @@ namespace VirtoCommerce.Platform.Data.Repositories
 
             #endregion
 
+            #region Localization
+            modelBuilder.Entity<LocalizedItemEntity>().ToTable("PlatformLocalizedItem").HasKey(x => x.Id);
+            modelBuilder.Entity<LocalizedItemEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
+            modelBuilder.Entity<LocalizedItemEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
+            modelBuilder.Entity<LocalizedItemEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
+            modelBuilder.Entity<LocalizedItemEntity>()
+                .HasIndex(x => new { x.Name, x.Alias })
+                .IsUnique(false)
+                .HasDatabaseName("IX_PlatformLocalizedItem_Name_Alias");
+            #endregion
+
             #region Dynamic Properties
 
             modelBuilder.Entity<DynamicPropertyEntity>().ToTable("PlatformDynamicProperty").HasKey(x => x.Id);
-            modelBuilder.Entity<DynamicPropertyEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<DynamicPropertyEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<DynamicPropertyEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyEntity>().HasIndex(x => new { x.ObjectType, x.Name })
@@ -69,7 +87,7 @@ namespace VirtoCommerce.Platform.Data.Repositories
                         .IsUnique(true);
 
             modelBuilder.Entity<DynamicPropertyNameEntity>().ToTable("PlatformDynamicPropertyName").HasKey(x => x.Id);
-            modelBuilder.Entity<DynamicPropertyNameEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<DynamicPropertyNameEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<DynamicPropertyNameEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyNameEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyNameEntity>().HasOne(x => x.Property)
@@ -81,9 +99,8 @@ namespace VirtoCommerce.Platform.Data.Repositories
                         .HasDatabaseName("IX_PlatformDynamicPropertyName_PropertyId_Locale_Name")
                         .IsUnique(true);
 
-
             modelBuilder.Entity<DynamicPropertyDictionaryItemEntity>().ToTable("PlatformDynamicPropertyDictionaryItem").HasKey(x => x.Id);
-            modelBuilder.Entity<DynamicPropertyDictionaryItemEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<DynamicPropertyDictionaryItemEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<DynamicPropertyDictionaryItemEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyDictionaryItemEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyDictionaryItemEntity>().HasOne(x => x.Property)
@@ -95,9 +112,8 @@ namespace VirtoCommerce.Platform.Data.Repositories
                         .HasDatabaseName("IX_PlatformDynamicPropertyDictionaryItem_PropertyId_Name")
                         .IsUnique(true);
 
-
             modelBuilder.Entity<DynamicPropertyDictionaryItemNameEntity>().ToTable("PlatformDynamicPropertyDictionaryItemName").HasKey(x => x.Id);
-            modelBuilder.Entity<DynamicPropertyDictionaryItemNameEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<DynamicPropertyDictionaryItemNameEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<DynamicPropertyDictionaryItemNameEntity>().Property(x => x.CreatedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyDictionaryItemNameEntity>().Property(x => x.ModifiedBy).HasMaxLength(_idLength64);
             modelBuilder.Entity<DynamicPropertyDictionaryItemNameEntity>().HasOne(x => x.DictionaryItem)
@@ -109,19 +125,13 @@ namespace VirtoCommerce.Platform.Data.Repositories
                         .HasDatabaseName("IX_PlatformDynamicPropertyDictionaryItemName_DictionaryItemId_Locale_Name")
                         .IsUnique(true);
 
-
             #endregion
 
             #region Raw license
             modelBuilder.Entity<RawLicenseEntity>().ToTable("RawLicense").HasKey(x => x.Id);
-            modelBuilder.Entity<RawLicenseEntity>().Property(x => x.Id).HasMaxLength(_idLength128).ValueGeneratedOnAdd();
+            modelBuilder.Entity<RawLicenseEntity>().Property(x => x.Id).HasMaxLength(IdLength).ValueGeneratedOnAdd();
             modelBuilder.Entity<RawLicenseEntity>().Property(x => x.Data);
             #endregion
-
-            base.OnModelCreating(modelBuilder);
         }
-
     }
-
-
 }

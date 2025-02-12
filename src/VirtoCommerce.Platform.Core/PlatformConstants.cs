@@ -11,6 +11,12 @@ namespace VirtoCommerce.Platform.Core
     {
         public static class Security
         {
+            public static class GrantTypes
+            {
+                public const string Impersonate = "impersonate";
+                public const string ExternalSignIn = "external_sign_in";
+            }
+
             public static class Claims
             {
                 public const string PermissionClaimType = "permission";
@@ -18,6 +24,16 @@ namespace VirtoCommerce.Platform.Core
                 public const string UserNameClaimType = "username";
                 public const string LimitedPermissionsClaimType = "limited_permissions";
                 public const string MemberIdClaimType = "memberId";
+
+                /// <summary>
+                /// Represents Operator User ID after impersonation 
+                /// </summary>
+                public const string OperatorUserId = "vc_operator_user_id";
+
+                /// <summary>
+                /// Represents Operator User Name after impersonation
+                /// </summary>
+                public const string OperatorUserName = "vc_operator_name";
             }
 
             public static class SystemRoles
@@ -31,42 +47,42 @@ namespace VirtoCommerce.Platform.Core
             {
                 public const string ResetCache = "cache:reset";
 
-                public const string AssetAccess = "platform:asset:access",
-                                    AssetDelete = "platform:asset:delete",
-                                    AssetUpdate = "platform:asset:update",
-                                    AssetCreate = "platform:asset:create",
-                                    AssetRead = "platform:asset:read";
+                public const string AssetAccess = "platform:asset:access";
+                public const string AssetDelete = "platform:asset:delete";
+                public const string AssetUpdate = "platform:asset:update";
+                public const string AssetCreate = "platform:asset:create";
+                public const string AssetRead = "platform:asset:read";
 
-                public const string ModuleQuery = "platform:module:read",
-                                    ModuleAccess = "platform:module:access",
-                                    ModuleManage = "platform:module:manage";
+                public const string ModuleQuery = "platform:module:read";
+                public const string ModuleAccess = "platform:module:access";
+                public const string ModuleManage = "platform:module:manage";
 
-                public const string SettingQuery = "platform:setting:read",
-                                    SettingAccess = "platform:setting:access",
-                                    SettingUpdate = "platform:setting:update";
+                public const string SettingQuery = "platform:setting:read";
+                public const string SettingAccess = "platform:setting:access";
+                public const string SettingUpdate = "platform:setting:update";
 
-                public const string DynamicPropertiesQuery = "platform:dynamic_properties:read",
-                                    DynamicPropertiesCreate = "platform:dynamic_properties:create",
-                                    DynamicPropertiesAccess = "platform:dynamic_properties:access",
-                                    DynamicPropertiesUpdate = "platform:dynamic_properties:update",
-                                    DynamicPropertiesDelete = "platform:dynamic_properties:delete";
+                public const string DynamicPropertiesQuery = "platform:dynamic_properties:read";
+                public const string DynamicPropertiesCreate = "platform:dynamic_properties:create";
+                public const string DynamicPropertiesAccess = "platform:dynamic_properties:access";
+                public const string DynamicPropertiesUpdate = "platform:dynamic_properties:update";
+                public const string DynamicPropertiesDelete = "platform:dynamic_properties:delete";
 
-                public const string SecurityQuery = "platform:security:read",
-                                    SecurityCreate = "platform:security:create",
-                                    SecurityAccess = "platform:security:access",
-                                    SecurityUpdate = "platform:security:update",
-                                    SecurityDelete = "platform:security:delete",
-                                    SecurityVerifyEmail = "platform:security:verifyEmail",
-                                    SecurityLoginOnBehalf = "platform:security:loginOnBehalf",
-                                    SecurityConfirmEmail = "platform:security:confirmEmail",
-                                    SecurityGenerateToken = "platform:security:generateToken",
-                                    SecurityVerifyToken = "platform:security:verifyToken";
+                public const string SecurityQuery = "platform:security:read";
+                public const string SecurityCreate = "platform:security:create";
+                public const string SecurityAccess = "platform:security:access";
+                public const string SecurityUpdate = "platform:security:update";
+                public const string SecurityDelete = "platform:security:delete";
+                public const string SecurityVerifyEmail = "platform:security:verifyEmail";
+                public const string SecurityLoginOnBehalf = "platform:security:loginOnBehalf";
+                public const string SecurityConfirmEmail = "platform:security:confirmEmail";
+                public const string SecurityGenerateToken = "platform:security:generateToken";
+                public const string SecurityVerifyToken = "platform:security:verifyToken";
 
                 public const string BackgroundJobsManage = "background_jobs:manage";
 
-                public const string PlatformExportImportAccess = "platform:exportImport:access",
-                                    PlatformImport = "platform:import",
-                                    PlatformExport = "platform:export";
+                public const string PlatformExportImportAccess = "platform:exportImport:access";
+                public const string PlatformImport = "platform:import";
+                public const string PlatformExport = "platform:export";
 
                 public static string[] AllPermissions { get; } = new[] { ResetCache, AssetAccess, AssetDelete, AssetUpdate, AssetCreate, AssetRead, ModuleQuery, ModuleAccess, ModuleManage,
                                               SettingQuery, SettingAccess, SettingUpdate, DynamicPropertiesQuery, DynamicPropertiesCreate, DynamicPropertiesAccess, DynamicPropertiesUpdate, DynamicPropertiesDelete,
@@ -86,16 +102,73 @@ namespace VirtoCommerce.Platform.Core
 
         public static class Settings
         {
+            public static class General
+            {
+                public static SettingDescriptor Languages { get; } = new()
+                {
+                    Name = "VirtoCommerce.Core.General.Languages",
+                    GroupName = "Platform|General",
+                    ValueType = SettingValueType.ShortText,
+                    DefaultValue = "en-US",
+                    IsDictionary = true,
+                    AllowedValues = new object[] { "en-US", "fr-FR", "de-DE", "ja-JP" },
+                };
+
+                public static IEnumerable<SettingDescriptor> AllGeneralSettings
+                {
+                    get
+                    {
+                        yield return Languages;
+                    }
+                }
+            }
+
             public static class Security
             {
-                public static SettingDescriptor SecurityAccountTypes { get; } = new SettingDescriptor
+                public static SettingDescriptor SecurityAccountTypes { get; } = new()
                 {
                     Name = "VirtoCommerce.Platform.Security.AccountTypes",
                     GroupName = "Platform|Security",
                     ValueType = SettingValueType.ShortText,
                     IsDictionary = true,
-                    AllowedValues = Enum.GetNames(typeof(UserType)),
-                    DefaultValue = UserType.Customer
+                    IsLocalizable = true,
+                    AllowedValues = Enum.GetNames(typeof(UserType)).ToArray<object>(),
+                    DefaultValue = UserType.Customer.ToString(),
+                };
+
+                public static SettingDescriptor DefaultAccountType { get; } = new()
+                {
+                    Name = "VirtoCommerce.Platform.Security.DefaultAccountType",
+                    GroupName = "Platform|Security",
+                    ValueType = SettingValueType.ShortText,
+                    DefaultValue = SecurityAccountTypes.DefaultValue,
+                };
+
+                public static SettingDescriptor AccountStatuses { get; } = new()
+                {
+                    Name = "VirtoCommerce.Other.AccountStatuses",
+                    GroupName = "Platform|Security",
+                    ValueType = SettingValueType.ShortText,
+                    IsDictionary = true,
+                    IsLocalizable = true,
+                    AllowedValues = new object[] { "New", "Approved", "Rejected", "Deleted" },
+                    DefaultValue = "New",
+                };
+
+                public static SettingDescriptor DefaultAccountStatus { get; } = new()
+                {
+                    Name = "VirtoCommerce.Platform.Security.DefaultAccountStatus",
+                    GroupName = "Platform|Security",
+                    ValueType = SettingValueType.ShortText,
+                    DefaultValue = AccountStatuses.DefaultValue,
+                };
+
+                public static SettingDescriptor DefaultExternalAccountStatus { get; } = new()
+                {
+                    Name = "VirtoCommerce.Platform.Security.DefaultExternalAccountStatus",
+                    GroupName = "Platform|Security",
+                    ValueType = SettingValueType.ShortText,
+                    DefaultValue = "Approved",
                 };
 
                 public static readonly SettingDescriptor EnablePruneExpiredTokensJob = new SettingDescriptor
@@ -119,7 +192,7 @@ namespace VirtoCommerce.Platform.Core
                     GroupName = "Platform|Security",
                     ValueType = SettingValueType.ShortText,
                     IsDictionary = true,
-                    AllowedValues = new string[] {
+                    AllowedValues = new object[] {
                         ".asax",
                         ".ascx",
                         ".master",
@@ -174,7 +247,7 @@ namespace VirtoCommerce.Platform.Core
                     GroupName = "Platform|Security",
                     ValueType = SettingValueType.ShortText,
                     IsDictionary = true,
-                    AllowedValues = new string[0],
+                    AllowedValues = Array.Empty<object>(),
                     DefaultValue = "_none", // fake default value to fix empty dictionary saving issue
                 };
 
@@ -183,6 +256,10 @@ namespace VirtoCommerce.Platform.Core
                     get
                     {
                         yield return SecurityAccountTypes;
+                        yield return DefaultAccountType;
+                        yield return AccountStatuses;
+                        yield return DefaultAccountStatus;
+                        yield return DefaultExternalAccountStatus;
                         yield return EnablePruneExpiredTokensJob;
                         yield return CronPruneExpiredTokensJob;
                         yield return FileExtensionsBlackList;
@@ -311,7 +388,7 @@ namespace VirtoCommerce.Platform.Core
                     ValueType = SettingValueType.ShortText,
                     GroupName = "Platform|User Profile",
                     DefaultValue = "Never",
-                    AllowedValues = new[]
+                    AllowedValues = new object[]
                                 {
                                     "Never",
                                     "Seconds",
@@ -359,7 +436,7 @@ namespace VirtoCommerce.Platform.Core
                     DefaultValue = "{\n" +
                                                "  \"title\": \"Virto Commerce\",\n" +
                                                "  \"logo\": \"/images/logo.png\",\n" +
-                                               "  \"contrast_logo\": \"/images/contrast-logo.svg\"\n" +
+                                               "  \"contrast_logo\": \"/images/logo-small.svg\"\n" +
                                                "}"
                 };
 
@@ -372,32 +449,12 @@ namespace VirtoCommerce.Platform.Core
                 }
             }
 
-            public static class Other
-            {
-                public static SettingDescriptor AccountStatuses { get; } = new SettingDescriptor
-                {
-                    Name = "VirtoCommerce.Other.AccountStatuses",
-                    GroupName = "Platform|Other",
-                    ValueType = SettingValueType.ShortText,
-                    DefaultValue = "New",
-                    IsDictionary = true,
-                    AllowedValues = new[] { "New", "Approved", "Rejected", "Deleted" }
-                };
-
-                public static IEnumerable<SettingDescriptor> AllSettings
-                {
-                    get
-                    {
-                        yield return AccountStatuses;
-                    }
-                }
-            }
-
-            public static IEnumerable<SettingDescriptor> AllSettings => Security.AllSettings
+            public static IEnumerable<SettingDescriptor> AllSettings =>
+                General.AllGeneralSettings
+                .Concat(Security.AllSettings)
                 .Concat(Setup.AllSettings)
                 .Concat(UserProfile.AllSettings)
-                .Concat(UserInterface.AllSettings)
-                .Concat(Other.AllSettings);
+                .Concat(UserInterface.AllSettings);
         }
     }
 }

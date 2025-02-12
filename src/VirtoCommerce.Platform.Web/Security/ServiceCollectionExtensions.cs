@@ -1,19 +1,20 @@
 using System;
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using VirtoCommerce.Platform.Core.ChangeLog;
+using Microsoft.Extensions.Options;
+using NetEscapades.AspNetCore.SecurityHeaders.Headers.ContentSecurityPolicy;
 using VirtoCommerce.Platform.Core.Common;
-using VirtoCommerce.Platform.Core.Exceptions;
-using VirtoCommerce.Platform.Core.GenericCrud;
 using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.Platform.Core.Security.Search;
 using VirtoCommerce.Platform.Security;
 using VirtoCommerce.Platform.Security.Exceptions;
 using VirtoCommerce.Platform.Security.Handlers;
+using VirtoCommerce.Platform.Security.OpenIddict;
 using VirtoCommerce.Platform.Security.Repositories;
 using VirtoCommerce.Platform.Security.Services;
 
@@ -21,13 +22,16 @@ namespace VirtoCommerce.Platform.Web.Security
 {
     public static class ServiceCollectionExtensions
     {
+        private const string _scpFormActionUriKey = "Content-Security-Policy-Form-Action-Uri";
+        private static readonly ConcurrentDictionary<string, HeaderPolicyCollection> _policyCache = new();
+
         public static IServiceCollection AddSecurityServices(this IServiceCollection services, Action<AuthorizationOptions> setupAction = null)
         {
             services.AddTransient<ISecurityRepository, SecurityRepository>();
             services.AddTransient<Func<ISecurityRepository>>(provider => () => provider.CreateScope().ServiceProvider.GetService<ISecurityRepository>());
 
-            services.AddScoped<IUserApiKeyService, UserApiKeyService>();
-            services.AddScoped<IUserApiKeySearchService, UserApiKeySearchService>();
+            services.AddSingleton<IUserApiKeyService, UserApiKeyService>();
+            services.AddSingleton<IUserApiKeySearchService, UserApiKeySearchService>();
 
             services.AddScoped<IUserNameResolver, HttpContextUserResolver>();
             services.AddSingleton<IPermissionsRegistrar, DefaultPermissionProvider>();
@@ -46,22 +50,23 @@ namespace VirtoCommerce.Platform.Web.Security
             services.TryAddScoped<UserManager<ApplicationUser>, CustomUserManager>();
             services.TryAddScoped<IPasswordValidator<ApplicationUser>, CustomPasswordValidator>();
             services.TryAddScoped<IdentityErrorDescriber, CustomIdentityErrorDescriber>();
+            services.TryAddScoped<IUserStore<ApplicationUser>, CustomUserStore>();
             services.AddSingleton<Func<RoleManager<Role>>>(provider => () => provider.CreateScope().ServiceProvider.GetService<RoleManager<Role>>());
             services.AddSingleton<Func<UserManager<ApplicationUser>>>(provider => () => provider.CreateScope().ServiceProvider.GetService<UserManager<ApplicationUser>>());
             services.AddSingleton<Func<SignInManager<ApplicationUser>>>(provider => () => provider.CreateScope().ServiceProvider.GetService<SignInManager<ApplicationUser>>());
-            services.AddSingleton<IUserPasswordHasher, DefaultUserPasswordHasher>();
             //Use custom ClaimsPrincipalFactory to add system roles claims for user principal
             services.TryAddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, CustomUserClaimsPrincipalFactory>();
+            services.AddTransient<ITokenRequestValidator, BaseUserSignInValidator>();
 
             if (setupAction != null)
             {
                 services.Configure(setupAction);
             }
 
-            services.AddSingleton(provider => new LogChangesUserChangedEventHandler(provider.CreateScope().ServiceProvider.GetService<IChangeLogService>()));
-            services.AddSingleton(provider => new UserApiKeyActualizeEventHandler(provider.CreateScope().ServiceProvider.GetService<IUserApiKeyService>()));
+            services.AddSingleton<LogChangesUserChangedEventHandler>();
+            services.AddSingleton<UserApiKeyActualizeEventHandler>();
 
-            services.AddTransient<ICrudService<ServerCertificate>, ServerCertificateService>();
+            services.AddTransient<IServerCertificateService, ServerCertificateService>();
 
             return services;
         }
@@ -77,7 +82,7 @@ namespace VirtoCommerce.Platform.Web.Security
         public static void UpdateServerCertificateIfNeed(this IApplicationBuilder app, ServerCertificate currentCert)
         {
             var certificateStorage = app.ApplicationServices.GetService<ICertificateLoader>();
-            var certificateService = app.ApplicationServices.GetService<ICrudService<ServerCertificate>>();
+            var certificateService = app.ApplicationServices.GetService<IServerCertificateService>();
             var possiblyOldCert = certificateStorage.Load(); // Previously stored cert (possibly old, default or just created by another platform instance)
             if (!possiblyOldCert.SerialNumber.EqualsInvariant(currentCert.SerialNumber))
             {   // Therefore, currentCert is newly generated and needs to be saved.
@@ -89,11 +94,11 @@ namespace VirtoCommerce.Platform.Web.Security
 
                 if (!string.IsNullOrEmpty(possiblyOldCert.Id))
                 {
-                    // Delete old certificate in case of one exists (the Id of newly generated certs is null)
-                    certificateService.DeleteAsync(new string[] { possiblyOldCert.Id }).GetAwaiter().GetResult();
+                    // Delete old certificate in case of one exists (the ID of newly generated certs is null)
+                    certificateService.DeleteAsync([possiblyOldCert.Id]).GetAwaiter().GetResult();
                 }
 
-                certificateService.SaveChangesAsync(new ServerCertificate[] { currentCert }).GetAwaiter().GetResult();
+                certificateService.SaveChangesAsync([currentCert]).GetAwaiter().GetResult();
             }
         }
 
@@ -119,6 +124,83 @@ namespace VirtoCommerce.Platform.Web.Security
                     options.KnownProxies.Clear();
                 });
             }
+        }
+
+        public static void AddCustomSecurityHeaders(this IServiceCollection services)
+        {
+            services.AddSecurityHeaderPolicies((policyBuilder, _) =>
+            {
+                policyBuilder.SetPolicySelector(context =>
+                {
+                    var options = context.HttpContext.RequestServices.GetService<IOptions<SecurityHeadersOptions>>().Value;
+                    var formActionUri = context.HttpContext.GetScpFormActionUri() ?? string.Empty;
+
+                    if (_policyCache.TryGetValue(formActionUri, out var policies))
+                    {
+                        return policies;
+                    }
+
+                    policies = new HeaderPolicyCollection().AddDefaultSecurityHeaders();
+
+                    if (options.FrameOptions.EqualsIgnoreCase("SameOrigin"))
+                    {
+                        policies.AddFrameOptionsSameOrigin();
+                    }
+                    else if (options.FrameOptions.EqualsIgnoreCase("Deny"))
+                    {
+                        policies.AddFrameOptionsDeny();
+                    }
+                    else if (!string.IsNullOrEmpty(options.FrameOptions))
+                    {
+                        policies.AddFrameOptionsSameOrigin(options.FrameOptions);
+                    }
+
+                    policies.AddContentSecurityPolicy(builder =>
+                    {
+                        builder.AddObjectSrc().None();
+                        builder.AddFormAction().Self().Uri(formActionUri);
+
+                        if (options.FrameAncestors.EqualsIgnoreCase("None"))
+                        {
+                            builder.AddFrameAncestors().None();
+                        }
+                        else if (options.FrameAncestors.EqualsIgnoreCase("Self"))
+                        {
+                            builder.AddFrameAncestors().Self();
+                        }
+                        else if (!string.IsNullOrEmpty(options.FrameAncestors))
+                        {
+                            builder.AddFrameAncestors().From(options.FrameAncestors);
+                        }
+                    });
+
+                    _policyCache.AddOrUpdate(formActionUri, policies, (_, _) => policies);
+
+                    return policies;
+                });
+            });
+        }
+
+        public static void OverrideScpFormActionUri(this HttpContext httpContext, string uri)
+        {
+            httpContext.Items[_scpFormActionUriKey] = uri;
+        }
+
+        public static string GetScpFormActionUri(this HttpContext httpContext)
+        {
+            return httpContext.Items.TryGetValue(_scpFormActionUriKey, out var value)
+                ? value as string
+                : null;
+        }
+
+        public static T Uri<T>(this T builder, string uri) where T : CspDirectiveBuilder
+        {
+            if (!string.IsNullOrWhiteSpace(uri))
+            {
+                builder.Sources.Add(uri);
+            }
+
+            return builder;
         }
     }
 }

@@ -1,9 +1,8 @@
-using System.Threading.Tasks;
+using VirtoCommerce.Platform.Core.GenericCrud;
 
 namespace VirtoCommerce.Platform.Core.Security.Search
 {
-    public interface IUserApiKeySearchService
+    public interface IUserApiKeySearchService : ISearchService<UserApiKeySearchCriteria, UserApiKeySearchResult, UserApiKey>
     {
-        Task<UserApiKeySearchResult> SearchUserApiKeysAsync(UserApiKeySearchCriteria criteria);
     }
 }

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -9,7 +8,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using VirtoCommerce.Platform.Core;
 using VirtoCommerce.Platform.Core.Common;
-using VirtoCommerce.Platform.Core.Modularity;
 using VirtoCommerce.Platform.Core.Security;
 using VirtoCommerce.Platform.Core.Settings;
 using VirtoCommerce.Platform.Web.Model.Profiles;
@@ -23,15 +21,13 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
     public class ProfilesController : Controller
     {
         private readonly ISettingsManager _settingsManager;
-        private readonly ILocalModuleCatalog _moduleCatalog;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IConfiguration _configuration;
 
-        public ProfilesController(UserManager<ApplicationUser> userManager, ISettingsManager settingsManager, ILocalModuleCatalog moduleCatalog, IConfiguration configuration)
+        public ProfilesController(UserManager<ApplicationUser> userManager, ISettingsManager settingsManager, IConfiguration configuration)
         {
             _userManager = userManager;
             _settingsManager = settingsManager;
-            _moduleCatalog = moduleCatalog;
             _configuration = configuration;
         }
 
@@ -52,7 +48,9 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
 
                 // Main menu settings at initial boot
                 var nameMainMenuState = PlatformConstants.Settings.UserProfile.MainMenuState.Name;
-                if (userProfile.Settings.FirstOrDefault(x => x.Name == nameMainMenuState)?.Value == null)
+                var nameMainMenuStateSetting = userProfile.Settings.FirstOrDefault(x => x.Name == nameMainMenuState);
+
+                if (nameMainMenuStateSetting != null && nameMainMenuStateSetting.Value == null)
                 {
                     var settingMenuState = new DefaultMainMenuState();
                     _configuration.GetSection("DefaultMainMenuState").Bind(settingMenuState);
@@ -61,7 +59,7 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                     };
                     var mainMenuState = JsonSerializer.Serialize(settingMenuState, serializeOptions);
-                    userProfile.Settings.FirstOrDefault(x => x.Name == nameMainMenuState).Value = mainMenuState;
+                    nameMainMenuStateSetting.Value = mainMenuState;
                 }
 
                 return Ok(userProfile);
@@ -82,9 +80,9 @@ namespace VirtoCommerce.Platform.Web.Controllers.Api
             var currentUser = await _userManager.FindByNameAsync(User.Identity.Name);
             if (currentUser.Id != userProfile.Id)
             {
-                return Unauthorized();
+                return Forbid();
             }
-            using (await AsyncLock.GetLockByKey(userProfile.ToString()).GetReleaserAsync())
+            using (await AsyncLock.GetLockByKey(userProfile.ToString()).LockAsync())
             {
                 await _settingsManager.DeepSaveSettingsAsync(userProfile);
             }
